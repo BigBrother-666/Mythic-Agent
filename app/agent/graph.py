@@ -1,6 +1,10 @@
 """LangGraph: Planner → Retriever → Generator → Validator → (Fix loop) → Done。
 
-事件经由 astream_events 透出给 FastAPI SSE。
+事件流通过 `stream_events` 同时暴露两种模式：
+- `updates`: 每个节点完成后的状态变更（plan / retrieved / yaml / validation 等结构化事件）
+- `messages`: 节点内 LLM 调用的逐 token 流（首 token 时间显著降低）
+
+调用方根据 `(mode, payload)` 二元组分别处理即可。
 """
 from __future__ import annotations
 
@@ -313,9 +317,18 @@ async def run_agent(user_input: str) -> AgentState:
     return result
 
 
-async def stream_events(user_input: str) -> AsyncIterator[dict[str, Any]]:
-    """流式事件迭代器；service 层包成 SSE。"""
+async def stream_events(user_input: str) -> AsyncIterator[tuple[str, Any]]:
+    """流式事件迭代器；同时透传节点更新与 LLM token。
+
+    yield 出 `(mode, payload)`：
+    - `("updates", {<node_name>: <state_delta>})` —— 节点完成事件
+    - `("messages", (AIMessageChunk, metadata))` —— LLM 单个 token chunk；
+      调用方可读 `metadata["langgraph_node"]` 决定是否透传给用户
+      （例如只透传 `generator` / `fixer`，过滤 `planner` 内部 JSON）
+    """
     graph = build_graph()
     state: AgentState = {"user_input": user_input, "iterations": 0}
-    async for event in graph.astream(state, stream_mode="updates"):
-        yield event
+    async for mode, payload in graph.astream(
+        state, stream_mode=["updates", "messages"]
+    ):
+        yield mode, payload
