@@ -1,0 +1,174 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+  background: #0f172a;
+  color: #e2e8f0;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+header {
+  padding: 12px 24px;
+  background: #1e293b;
+  border-bottom: 1px solid #334155;
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+}
+
+header h1 {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.hint {
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.layout {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+  overflow: hidden;
+}
+
+.left, .right {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.left {
+  border-right: 1px solid #334155;
+}
+
+.messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.message {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  white-space: pre-wrap;
+}
+
+.message.user {
+  background: #1e3a8a;
+  margin-left: 40px;
+}
+
+.message.assistant {
+  background: #1e293b;
+  margin-right: 40px;
+}
+
+.message.event {
+  background: transparent;
+  color: #64748b;
+  font-size: 12px;
+  margin: 4px 0;
+  padding: 2px 8px;
+  font-family: monospace;
+}
+
+.composer {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid #334155;
+  padding: 8px;
+  gap: 4px;
+}
+
+textarea {
+  width: 100%;
+  background: #0f172a;
+  color: #e2e8f0;
+  border: 1px solid #334155;
+  border-radius: 6px;
+  padding: 8px;
+  font-family: inherit;
+  font-size: 14px;
+  resize: vertical;
+}
+
+button {
+  background: #2563eb;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+button:hover {
+  background: #1d4ed8;
+}
+
+button:disabled {
+  background: #475569;
+  cursor: not-allowed;
+}
+
+.status {
+  font-size: 12px;
+  color: #94a3b8;
+  padding: 0 8px 8px;
+  min-height: 18px;
+}
+
+.right {
+  background: #0b1220;
+}
+
+.yaml-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid #334155;
+  font-size: 14px;
+}
+
+.yaml-toolbar button {
+  padding: 4px 12px;
+  font-size: 12px;
+}
+
+pre {
+  flex: 1;
+  overflow: auto;
+  padding: 16px;
+  margin: 0;
+}
+
+code {
+  font-family: "Fira Code", Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.meta {
+  border-top: 1px solid #334155;
+  padding: 12px 16px;
+  font-size: 12px;
+  color: #94a3b8;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.meta .label {
+  color: #fbbf24;
+  font-weight: 600;
+  display: inline-block;
+  margin-right: 6px;
+}

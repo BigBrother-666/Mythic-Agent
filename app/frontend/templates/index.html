@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>MythicMobs Agent</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="/static/style.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.10.0/build/styles/atom-one-dark.min.css" />
+  <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.10.0/build/highlight.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.10.0/build/languages/yaml.min.js"></script>
+</head>
+<body>
+  <header>
+    <h1>MythicMobs Agent</h1>
+    <span class="hint">基于 LLM + RAG 的怪物 / 物品 / 技能 YAML 生成助手</span>
+  </header>
+
+  <main class="layout">
+    <section class="left">
+      <div id="messages" class="messages"></div>
+      <form id="chat-form" class="composer">
+        <textarea id="input" rows="3" placeholder="例：帮我设计一个深海 Boss，三阶段、冰冻技能、召唤小怪、狂暴机制"></textarea>
+        <button type="submit" id="send-btn">发送</button>
+      </form>
+      <div id="status" class="status"></div>
+    </section>
+
+    <section class="right">
+      <div class="yaml-toolbar">
+        <span>生成结果</span>
+        <button id="copy-btn" type="button">复制</button>
+      </div>
+      <pre><code id="yaml-out" class="language-yaml">// 生成的 YAML 会显示在这里</code></pre>
+      <div id="meta" class="meta"></div>
+    </section>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
