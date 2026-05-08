@@ -100,21 +100,32 @@ class HybridRetriever:
         category: str | None = None,
         wiki: str | None = None,
     ) -> list[FusedHit]:
-        """对外检索接口；返回 RRF 融合后的命中。
+        """对外检索接口；返回 RRF 融合后（如启用则再 rerank）的命中。
 
         wiki ∈ {"mythicmobs","crucible","local",None}。None 表示不过滤（默认）。
+
+        启用 rerank 时流程：
+            vector top-(k*pool_factor*3) ∪ BM25 top-(k*pool_factor*2)
+              → RRF 融合 → 取前 k*pool_factor 个候选
+              → CrossEncoder 重排序 → 截到 top_k
         """
         settings = get_settings()
         if top_k is None:
             top_k = settings.rag_top_k
 
+        # rerank 启用时取更大的候选池，否则旧逻辑保持 top_k * 3 / top_k * 2 不变
+        pool_factor = settings.rerank_pool_factor if settings.enable_rerank else 1
+        candidate_size = top_k * max(pool_factor, 1)
+
         embedder = get_embedding_service()
         store = get_milvus_store()
 
         vector = await embedder.embed_query(query)
-        vec_hits = await store.search(vector, top_k=top_k * 3, category=category, wiki=wiki)
+        vec_hits = await store.search(
+            vector, top_k=candidate_size * 3, category=category, wiki=wiki
+        )
 
-        bm25_pairs = self._bm25_search(query, top_k=top_k * 2)
+        bm25_pairs = self._bm25_search(query, top_k=candidate_size * 2)
 
         # ---------- RRF 融合 ----------
         rrf_k = 60
@@ -138,7 +149,9 @@ class HybridRetriever:
             scores[key] = scores.get(key, 0.0) + 1.0 / (rrf_k + rank + 1)
             keep.setdefault(key, h)
 
-        ranked_keys = sorted(scores.keys(), key=lambda k: scores[k], reverse=True)[:top_k]
+        # 取候选池
+        ranked_keys = sorted(scores.keys(), key=lambda k: scores[k], reverse=True)
+        pool_keys = ranked_keys[:candidate_size]
 
         fused = [
             FusedHit(
@@ -150,19 +163,48 @@ class HybridRetriever:
                 tags=keep[k].tags,
                 wiki=keep[k].wiki,
             )
-            for k in ranked_keys
+            for k in pool_keys
         ]
 
-        if settings.enable_rerank:
+        if settings.enable_rerank and fused:
             fused = await self._rerank(query, fused)
 
-        return fused
+        return fused[:top_k]
 
     async def _rerank(self, query: str, hits: list[FusedHit]) -> list[FusedHit]:
-        """Rerank 钩子；当前是 noop，留给后续接 bge-reranker-large。"""
-        # 这里保持接口稳定；真正实现时引入 sentence-transformers CrossEncoder。
-        _ = query
-        return hits
+        """用 CrossEncoder 重排序；失败时退回 RRF 顺序，不影响主流程可用性。"""
+        from app.rag.rerank import get_rerank_service
+
+        try:
+            service = get_rerank_service()
+            # rerank 时把 title 拼到 text 前面，让模型看到层级语义
+            payloads = [f"{h.title}\n\n{h.text}" if h.title else h.text for h in hits]
+            scores = await service.score(query, payloads)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("Rerank failed; fallback to RRF order: {}", e)
+            return hits
+
+        if len(scores) != len(hits):
+            logger.warning(
+                "Rerank score count mismatch ({} vs {}); fallback", len(scores), len(hits)
+            )
+            return hits
+
+        scored = list(zip(hits, scores, strict=True))
+        scored.sort(key=lambda pair: pair[1], reverse=True)
+        # 用 rerank 分数覆盖 FusedHit.score，方便上游观察
+        return [
+            FusedHit(
+                score=float(s),
+                text=h.text,
+                title=h.title,
+                source=h.source,
+                category=h.category,
+                tags=h.tags,
+                wiki=h.wiki,
+            )
+            for h, s in scored
+        ]
 
 
 def get_retriever() -> HybridRetriever:

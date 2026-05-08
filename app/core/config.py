@@ -30,6 +30,15 @@ class Settings(BaseSettings):
     embed_dim: int = Field(default=512)
     embed_device: str = Field(default="cpu")
 
+    # ---------- Reranker (可选) ----------
+    # ENABLE_RERANK=true 时，对融合后的候选做 cross-encoder 重排序
+    # bge-reranker-base ≈ 280MB，多语言版用 bge-reranker-v2-m3（≈ 600MB）
+    rerank_model: str = Field(default="BAAI/bge-reranker-base")
+    rerank_device: str = Field(default="cpu")
+    rerank_pool_factor: int = Field(default=4)  # 送入 rerank 的候选数 = top_k * 此倍数
+    rerank_max_length: int = Field(default=512)
+    rerank_batch_size: int = Field(default=16)
+
     # ---------- Milvus ----------
     milvus_host: str = Field(default="milvus")
     milvus_port: int = Field(default=19530)

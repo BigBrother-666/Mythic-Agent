@@ -27,6 +27,11 @@ async def health() -> APIResponse[dict]:
             "milvus_collection": settings.milvus_collection,
             "embed_model": settings.embed_model,
             "llm_model": settings.llm_model,
+            "rerank": {
+                "enabled": settings.enable_rerank,
+                "model": settings.rerank_model if settings.enable_rerank else None,
+                "pool_factor": settings.rerank_pool_factor if settings.enable_rerank else None,
+            },
             "detail": detail,
         }
     )
