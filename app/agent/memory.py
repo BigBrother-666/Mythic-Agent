@@ -56,6 +56,19 @@ class MemoryStore:
         s.last_yaml = yaml_text
         s.updated_at = time.time()
 
+    def snapshot(self, session_id: str, max_turns: int = 3) -> dict[str, object]:
+        """读取会话快照，供 graph 注入到状态。
+
+        返回最近 max_turns 轮 (user/assistant 配对) 历史 + last_yaml。
+        history 截到 user 消息打头的边界，避免发半截 assistant 给 LLM。
+        """
+        s = self.get(session_id)
+        # 取最后 2*max_turns 条；如果第一条是 assistant，再去掉一条让起点是 user
+        recent = list(s.history[-2 * max_turns :])
+        if recent and recent[0]["role"] == "assistant":
+            recent = recent[1:]
+        return {"history": recent, "last_yaml": s.last_yaml or ""}
+
 
 _store: MemoryStore | None = None
 

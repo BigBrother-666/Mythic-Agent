@@ -22,7 +22,7 @@ class _FakeChunk:
         self.content = content
 
 
-async def _fake_stream(_user_input: str) -> AsyncIterator[tuple[str, Any]]:
+async def _fake_stream(_user_input: str, **_kwargs) -> AsyncIterator[tuple[str, Any]]:
     """伪造 stream_events 输出：依次发出 plan / retrieval / token×3(generator) /
     token×1(planner=应该被过滤) / yaml / validation / 最后什么都不发。"""
     yield "updates", {

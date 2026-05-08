@@ -21,6 +21,7 @@ from app.agent.prompts import (
     SYSTEM_PROMPT,
     VALIDATOR_FIX_PROMPT,
     get_generator_prompt,
+    render_context_block,
 )
 from app.agent.tools import format_yaml, validate_yaml
 from app.core.config import get_settings
@@ -48,6 +49,10 @@ class AgentState(TypedDict, total=False):
     validation_warnings: list[str]
     iterations: int
     final_message: str
+    # ---- 多轮记忆字段（由 service 层注入） ----
+    history: list[dict[str, str]]  # 最近若干轮 [{role, content}]
+    last_yaml: str  # 上一次生成的 YAML（作为修改基线）
+    is_followup: bool  # planner 判定本次是否为「修改上一份 YAML」
 
 
 # ---------- LLM 工厂 ----------
@@ -151,11 +156,17 @@ _DEFAULT_NAME_BY_INTENT = {
 async def planner_node(state: AgentState) -> AgentState:
     """Planner：让 LLM 解析用户意图并拟定检索计划。"""
     llm = get_llm()
-    prompt = PLANNER_PROMPT.format(user_input=state["user_input"])
+    context_block = render_context_block(
+        state.get("history") or [], state.get("last_yaml") or ""
+    )
+    prompt = PLANNER_PROMPT.format(
+        user_input=state["user_input"], context_block=context_block
+    )
     resp = await llm.ainvoke([SystemMessage(content=SYSTEM_PROMPT), HumanMessage(content=prompt)])
     parsed = _extract_json(resp.content if isinstance(resp.content, str) else str(resp.content))
     raw_intent = parsed.get("intent")
     intent: Intent = raw_intent if raw_intent in {"mob", "item", "skill", "chat"} else "chat"
+    is_followup = bool(parsed.get("is_followup")) and bool((state.get("last_yaml") or "").strip())
     default_name = _DEFAULT_NAME_BY_INTENT.get(intent, "")
     return {
         **state,
@@ -163,6 +174,7 @@ async def planner_node(state: AgentState) -> AgentState:
         "name": parsed.get("name") or default_name,
         "notes": parsed.get("notes") or "",
         "search_queries": parsed.get("search_queries") or [],
+        "is_followup": is_followup,
     }
 
 
@@ -220,10 +232,18 @@ def _format_context(hits: list[dict[str, Any]], limit: int = 6000) -> str:
 async def generator_node(state: AgentState) -> AgentState:
     """生成 YAML + 解释 + 建议；按 intent 选不同模板。"""
     llm = get_llm()
+    context_block = render_context_block(
+        state.get("history") or [], state.get("last_yaml") or ""
+    )
     if state.get("intent") == "chat":
-        # 闲聊分支：直接用 SYSTEM_PROMPT 回答，不强制 YAML 模板。
+        # 闲聊分支：直接用 SYSTEM_PROMPT 回答，不强制 YAML 模板，但仍把历史 + last_yaml 给 LLM 看。
+        chat_user = (
+            (context_block + "\n用户输入：\n" + state["user_input"])
+            if context_block
+            else state["user_input"]
+        )
         resp = await llm.ainvoke(
-            [SystemMessage(content=SYSTEM_PROMPT), HumanMessage(content=state["user_input"])]
+            [SystemMessage(content=SYSTEM_PROMPT), HumanMessage(content=chat_user)]
         )
         text = resp.content if isinstance(resp.content, str) else str(resp.content)
         return {**state, "raw_output": text, "yaml_text": "", "explanation": text, "suggestions": [], "final_message": text}
@@ -238,6 +258,8 @@ async def generator_node(state: AgentState) -> AgentState:
         name=name,
         notes=state.get("notes", ""),
         context=context,
+        context_block=context_block,
+        is_followup=str(bool(state.get("is_followup"))).lower(),
     )
     resp = await llm.ainvoke(
         [SystemMessage(content=SYSTEM_PROMPT), HumanMessage(content=prompt)]
@@ -342,15 +364,34 @@ def build_graph():
     return _compiled
 
 
-async def run_agent(user_input: str) -> AgentState:
-    """同步式调用入口（非流式）。"""
+async def run_agent(
+    user_input: str,
+    *,
+    history: list[dict[str, str]] | None = None,
+    last_yaml: str = "",
+) -> AgentState:
+    """同步式调用入口（非流式）。
+
+    history / last_yaml 由 service 层从 MemoryStore.snapshot 取出后注入；
+    planner 据此判定 is_followup，generator 在 followup 时基于 last_yaml 增量改动。
+    """
     graph = build_graph()
-    state: AgentState = {"user_input": user_input, "iterations": 0}
+    state: AgentState = {
+        "user_input": user_input,
+        "iterations": 0,
+        "history": history or [],
+        "last_yaml": last_yaml or "",
+    }
     result = await graph.ainvoke(state)
     return result
 
 
-async def stream_events(user_input: str) -> AsyncIterator[tuple[str, Any]]:
+async def stream_events(
+    user_input: str,
+    *,
+    history: list[dict[str, str]] | None = None,
+    last_yaml: str = "",
+) -> AsyncIterator[tuple[str, Any]]:
     """流式事件迭代器；同时透传节点更新与 LLM token。
 
     yield 出 `(mode, payload)`：
@@ -360,7 +401,12 @@ async def stream_events(user_input: str) -> AsyncIterator[tuple[str, Any]]:
       （例如只透传 `generator` / `fixer`，过滤 `planner` 内部 JSON）
     """
     graph = build_graph()
-    state: AgentState = {"user_input": user_input, "iterations": 0}
+    state: AgentState = {
+        "user_input": user_input,
+        "iterations": 0,
+        "history": history or [],
+        "last_yaml": last_yaml or "",
+    }
     async for mode, payload in graph.astream(
         state, stream_mode=["updates", "messages"]
     ):

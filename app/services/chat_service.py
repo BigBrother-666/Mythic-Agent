@@ -59,13 +59,23 @@ def _chunk_text(message_chunk: Any) -> str:
 async def chat_stream(message: str, session_id: str | None = None) -> AsyncIterator[str]:
     """聊天 SSE 主迭代器。"""
     memory = get_memory()
+    # 关键：先取 snapshot 给 graph 用，**再**把当前 user message 写入历史，
+    # 否则 history 会包含本轮的 user 消息（重复）。
+    history: list[dict[str, str]] = []
+    last_yaml = ""
     if session_id:
+        snap = memory.snapshot(session_id, max_turns=3)
+        history = list(snap.get("history") or [])  # type: ignore[arg-type]
+        last_yaml = str(snap.get("last_yaml") or "")
         memory.append_message(session_id, "user", message)
 
     final_yaml = ""
+    final_explanation = ""
 
     try:
-        async for mode, payload in stream_events(message):
+        async for mode, payload in stream_events(
+            message, history=history, last_yaml=last_yaml
+        ):
             # ---- LLM token 流 ----
             if mode == "messages":
                 # payload 形如 (AIMessageChunk, metadata_dict)
@@ -95,6 +105,7 @@ async def chat_stream(message: str, session_id: str | None = None) -> AsyncItera
                             meta={
                                 "queries": ", ".join(node_state.get("search_queries", []) or []),
                                 "name": node_state.get("name", "") or "",
+                                "followup": "yes" if node_state.get("is_followup") else "no",
                             },
                         )
                     )
@@ -108,11 +119,14 @@ async def chat_stream(message: str, session_id: str | None = None) -> AsyncItera
                         )
                     )
                 elif node_name == "generator":
-                    # token 流已经实时透出；这里只补发一次 yaml 提取结果
+                    # token 流已经实时透出；这里只补发一次 yaml 提取结果与 explanation
                     yaml_text = node_state.get("yaml_text", "") or ""
                     if yaml_text:
                         final_yaml = yaml_text
                         yield _encode(ChatChunk(type="yaml", content=yaml_text))
+                    expl = node_state.get("explanation") or node_state.get("final_message") or ""
+                    if expl:
+                        final_explanation = expl
                 elif node_name == "validator":
                     errors = node_state.get("validation_errors", []) or []
                     warnings = node_state.get("validation_warnings", []) or []
@@ -140,8 +154,14 @@ async def chat_stream(message: str, session_id: str | None = None) -> AsyncItera
         yield _encode(ChatChunk(type="error", content=str(e)))
         return
 
-    if session_id and final_yaml:
-        memory.set_last_yaml(session_id, final_yaml)
+    # 把 assistant 的产物写回 history，让下一轮能看到
+    if session_id:
+        if final_yaml:
+            memory.set_last_yaml(session_id, final_yaml)
+        # 写一条 assistant 消息：优先存 explanation；YAML 单独走 last_yaml，不重复塞 history。
+        if final_explanation or final_yaml:
+            assistant_text = final_explanation or "(已生成 YAML)"
+            memory.append_message(session_id, "assistant", assistant_text)
     yield _encode(ChatChunk(type="done", content="finished"))
 
 
@@ -149,12 +169,23 @@ async def chat_once(message: str, session_id: str | None = None) -> dict[str, An
     """非流式聊天；用于测试或不支持 SSE 的客户端。"""
     from app.agent.graph import run_agent
 
-    result = await run_agent(message)
+    memory = get_memory()
+    history: list[dict[str, str]] = []
+    last_yaml = ""
     if session_id:
-        memory = get_memory()
+        snap = memory.snapshot(session_id, max_turns=3)
+        history = list(snap.get("history") or [])  # type: ignore[arg-type]
+        last_yaml = str(snap.get("last_yaml") or "")
         memory.append_message(session_id, "user", message)
+
+    result = await run_agent(message, history=history, last_yaml=last_yaml)
+
+    if session_id:
         if result.get("yaml_text"):
             memory.set_last_yaml(session_id, result["yaml_text"])
+        reply = result.get("explanation") or result.get("final_message") or ""
+        if reply or result.get("yaml_text"):
+            memory.append_message(session_id, "assistant", reply or "(已生成 YAML)")
     return {
         "reply": result.get("explanation") or result.get("final_message") or "",
         "yaml": result.get("yaml_text") or None,
