@@ -36,11 +36,11 @@ docker compose exec fastapi python -m scripts.ingest --drop --examples ./example
 
 入库会同时覆盖三类来源，每个 chunk 带 `metadata.wiki` 标签：
 
-| 来源                              | metadata.wiki | 用途                                       |
-| --------------------------------- | ------------- | ------------------------------------------ |
-| `wiki/MythicMobs.wiki/`           | `mythicmobs`  | mob / 技能 / 触发器 / 条件等核心 wiki      |
-| `wiki/mythiccrucible.wiki/`       | `crucible`    | 物品的额外机制 / 触发器 / 家具等           |
-| `examples/{mobs,items,skills}/`   | `local`       | 你的本地 YAML 样例（按顶层 key 切，整段保留） |
+| 来源                            | metadata.wiki | 用途                                          |
+| ------------------------------- | ------------- | --------------------------------------------- |
+| `wiki/MythicMobs.wiki/`         | `mythicmobs`  | mob / 技能 / 触发器 / 条件等核心 wiki         |
+| `wiki/mythiccrucible.wiki/`     | `crucible`    | 物品的额外机制 / 触发器 / 家具等              |
+| `examples/{mobs,items,skills}/` | `local`       | 你的本地 YAML 样例（按顶层 key 切，整段保留） |
 
 retriever 可按 `wiki=mythicmobs|crucible|local` 过滤；缺省不过滤。
 
@@ -76,6 +76,39 @@ pytest tests/ -q       # 含集成测试（mock 掉外部依赖）
 ruff check .
 mypy app
 ```
+
+## 评估 (Eval)
+
+`eval/queries.yaml` 里有 30 条人工标注题目，覆盖 mob / item / metaskill / mechanic /
+targeter / condition / trigger 7 类，中英混合。`eval/run_eval.py` 跑出 `Recall@K (K=1,3,5,8)` + `MRR`，
+并把 per-query 命中明细写到 `eval/results/{timestamp}_{label}.json`。
+
+```bash
+# 按 .env 当前设置跑一次
+docker compose exec fastapi python -m eval.run_eval
+# 或 不使用容器 本地跑
+fastapi python -m eval.run_eval
+
+# rerank开关对比
+docker compose exec fastapi python -m eval.run_eval --toggle-rerank
+
+# 可单独覆盖
+docker compose exec fastapi python -m eval.run_eval --rerank on --top-k 8
+```
+
+评估结果（embedding使用BAAI/bge-small-zh-v1.5，reranker使用BAAI/bge-reranker-base，使用cpu计算，N=30）：
+
+| metric   | rerank_off | rerank_on | Delta (rerank_on - rerank_off) |
+| -------- | ---------- | --------- | ------------------------------ |
+| recall@1 | 0.200      | 0.367     | +16.7pp                        |
+| recall@3 | 0.433      | 0.533     | +10.0pp                        |
+| recall@5 | 0.567      | 0.633     | +6.7pp                         |
+| recall@8 | 0.633      | 0.667     | +3.3pp                         |
+| mrr      | 0.341      | 0.472     | +13.1pp                        |
+
+
+新增评估题目时，每条 case 至少给 1 条 `expected_sources`（substring 匹配，容忍路径前缀差异），
+按 wiki 来源标注 `expected_wiki ∈ {mythicmobs, crucible, any}`。
 
 ## 流式协议
 
@@ -152,19 +185,19 @@ curl -X POST http://localhost:8000/api/validate \
 
 ## 配置项（.env）
 
-| 变量 | 默认 | 说明 |
-| --- | --- | --- |
-| OPENAI_API_KEY | (必填) | LLM API key |
-| OPENAI_BASE_URL | https://api.openai.com/v1 | OpenAI Chat API 兼容端点 |
-| LLM_MODEL | gpt-4o-mini | 模型名 |
-| EMBED_MODEL | BAAI/bge-small-zh-v1.5 | 默认轻量；可换 `BAAI/bge-m3` (1024 维) |
-| EMBED_DIM | 512 | 与 EMBED_MODEL 必须匹配，bge-m3 → 1024 |
-| EMBED_DEVICE | cpu | `cuda` 可显著加速入库 |
-| MILVUS_HOST | milvus | docker 内服务名 |
-| WIKI_ROOT | /wiki | wiki 父目录（容器内）；下含 MythicMobs.wiki / mythiccrucible.wiki |
-| RAG_TOP_K | 8 | 单次检索返回 chunk 数 |
-| ENABLE_RERANK | false | 启用 cross-encoder 二阶段重排序 |
-| RERANK_MODEL | BAAI/bge-reranker-base | rerank 模型；多语言可换 `BAAI/bge-reranker-v2-m3` |
-| RERANK_DEVICE | cpu | `cuda` 显著加速 |
-| RERANK_POOL_FACTOR | 4 | 送入 rerank 的候选数 = top_k × 此值；越大越准但越慢 |
-| RATE_LIMIT_PER_MINUTE | 30 | per-IP 限流 |
+| 变量                  | 默认                      | 说明                                                              |
+| --------------------- | ------------------------- | ----------------------------------------------------------------- |
+| OPENAI_API_KEY        | (必填)                    | LLM API key                                                       |
+| OPENAI_BASE_URL       | https://api.openai.com/v1 | OpenAI Chat API 兼容端点                                          |
+| LLM_MODEL             | gpt-4o-mini               | 模型名                                                            |
+| EMBED_MODEL           | BAAI/bge-small-zh-v1.5    | 默认轻量；可换 `BAAI/bge-m3` (1024 维)                            |
+| EMBED_DIM             | 512                       | 与 EMBED_MODEL 必须匹配，bge-m3 → 1024                            |
+| EMBED_DEVICE          | cpu                       | `cuda` 可显著加速入库                                             |
+| MILVUS_HOST           | milvus                    | docker 内服务名                                                   |
+| WIKI_ROOT             | /wiki                     | wiki 父目录（容器内）；下含 MythicMobs.wiki / mythiccrucible.wiki |
+| RAG_TOP_K             | 8                         | 单次检索返回 chunk 数                                             |
+| ENABLE_RERANK         | false                     | 启用 cross-encoder 二阶段重排序                                   |
+| RERANK_MODEL          | BAAI/bge-reranker-base    | rerank 模型；多语言可换 `BAAI/bge-reranker-v2-m3`                 |
+| RERANK_DEVICE         | cpu                       | `cuda` 显著加速                                                   |
+| RERANK_POOL_FACTOR    | 4                         | 送入 rerank 的候选数 = top_k × 此值；越大越准但越慢               |
+| RATE_LIMIT_PER_MINUTE | 30                        | per-IP 限流                                                       |
