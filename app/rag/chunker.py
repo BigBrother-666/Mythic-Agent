@@ -1,6 +1,12 @@
 """结构化 Markdown 切分器；按 heading 与 YAML 代码块切，保留父级 heading 路径。
 
 绝不在围栏代码块内切分；尽量保留 YAML 块完整性，便于 LLM 在生成时可以参考完整示例。
+
+source 路径约定（统一使用相对于 ingest root 的相对路径）：
+- `MythicMobs.wiki/Skills/Mechanics/projectile.md`     —— mythicmobs wiki
+- `mythiccrucible.wiki/Skills/Mechanics/xxx.md`        —— crucible wiki
+- `examples/items/foo.yml`                              —— 本地示例 yml
+metadata.wiki ∈ {"mythicmobs","crucible","local"}，retriever 可按此过滤。
 """
 from __future__ import annotations
 
@@ -39,6 +45,38 @@ _SKILLS_SUB_MAP = {
 }
 
 
+def _infer_wiki(source: str) -> str:
+    """从相对路径推断属于哪个 wiki 源。"""
+    parts = Path(source).parts
+    if not parts:
+        return "local"
+    head = parts[0].lower()
+    if head.startswith("mythicmobs"):
+        return "mythicmobs"
+    if head.startswith("mythiccrucible"):
+        return "crucible"
+    if head.startswith("examples"):
+        return "local"
+    # 兼容旧的 ingest 直接传 wiki 子目录的情况
+    return "mythicmobs"
+
+
+def _strip_wiki_prefix(source: str) -> tuple[str, str]:
+    """剥掉 `MythicMobs.wiki/` 这种前缀，返回 (wiki_label, rest_path)。"""
+    parts = Path(source).parts
+    if not parts:
+        return "local", source
+    head = parts[0].lower()
+    rest = str(Path(*parts[1:])) if len(parts) > 1 else ""
+    if head.startswith("mythicmobs"):
+        return "mythicmobs", rest
+    if head.startswith("mythiccrucible"):
+        return "crucible", rest
+    if head.startswith("examples"):
+        return "local", str(Path(*parts))  # examples 路径完整保留
+    return "mythicmobs", source
+
+
 @dataclass
 class Chunk:
     """单个 chunk；包含文本与 metadata。"""
@@ -52,14 +90,30 @@ class Chunk:
 
 
 def _infer_category(source: str) -> str:
-    """从源路径推断 category。"""
+    """从源路径推断 category。
+
+    支持的形态：
+    - `MythicMobs.wiki/Skills/Mechanics/...` → mechanics
+    - `mythiccrucible.wiki/Skills/Mechanics/...` → mechanics
+    - `examples/items/foo.yml` → examples
+    - 直接传 wiki 子目录（无 wiki prefix）也兼容旧调用
+    """
     parts = Path(source).parts
     if not parts:
         return "misc"
+    # 跳过 wiki 前缀
+    head_lower = parts[0].lower()
+    if head_lower.startswith("mythicmobs") or head_lower.startswith("mythiccrucible"):
+        parts = parts[1:]
+        if not parts:
+            return "misc"
     top = parts[0]
     if top == "Skills" and len(parts) >= 2:
         sub = parts[1]
         return _SKILLS_SUB_MAP.get(sub, "mechanics")
+    if len(parts) == 1:
+        # wiki 根目录下的散文档（changelog / 概览 / FAQ 之类）
+        return "guides"
     return _CATEGORY_MAP.get(top, top.lower())
 
 
@@ -189,6 +243,7 @@ def chunk_markdown(
     flush()
 
     chunks: list[Chunk] = []
+    wiki_label = _infer_wiki(source)
     for headings, body in sections:
         clean_headings = [h for h in headings if h]
         title = clean_headings[0] if clean_headings else file_title
@@ -216,6 +271,7 @@ def chunk_markdown(
                             "has_yaml": has_yaml,
                             "kind": "code",
                             "lang": lang,
+                            "wiki": wiki_label,
                         },
                     )
                 )
@@ -235,6 +291,7 @@ def chunk_markdown(
                                 "has_yaml": False,
                                 "kind": "text",
                                 "lang": "",
+                                "wiki": wiki_label,
                             },
                         )
                     )
@@ -252,3 +309,70 @@ def iter_wiki_files(wiki_root: Path) -> list[Path]:
             continue
         files.append(p)
     return sorted(files)
+
+
+def iter_yaml_files(root: Path) -> list[Path]:
+    """遍历目录下所有 .yml / .yaml 文件。"""
+    files: list[Path] = []
+    for ext in ("*.yml", "*.yaml"):
+        files.extend(root.rglob(ext))
+    return sorted(files)
+
+
+def chunk_yaml_file(text: str, source: str, *, max_chunk_chars: int = 4000) -> list[Chunk]:
+    """把一个独立的 YAML 文件切成 chunks。
+
+    策略：按顶层 key（无缩进的 `XxxName:`）切；每个顶层对象一个 chunk，超长再按段落软切。
+    metadata.has_yaml=True，category 推断自路径（examples/items → examples），
+    wiki 推断为 local。
+
+    这样 example_retriever 检索时能直接拿到完整可粘贴的样例。
+    """
+    category = _infer_category(source)
+    wiki_label = _infer_wiki(source)
+    file_title = Path(source).stem
+
+    # 按「行首非空白字符开始的一行（顶层 key）」切。注释行 / 空行附给前一段。
+    blocks: list[tuple[str, list[str]]] = []  # (key, lines)
+    cur_key: str | None = None
+    cur_lines: list[str] = []
+    for line in text.splitlines():
+        if line and not line[0].isspace() and ":" in line and not line.lstrip().startswith("#"):
+            if cur_key is not None:
+                blocks.append((cur_key, cur_lines))
+            cur_key = line.split(":", 1)[0].strip()
+            cur_lines = [line]
+        else:
+            cur_lines.append(line)
+    if cur_key is not None:
+        blocks.append((cur_key, cur_lines))
+
+    chunks: list[Chunk] = []
+    for key, lines in blocks:
+        body = "\n".join(lines).strip("\n")
+        if not body.strip():
+            continue
+        wrapped_pieces: list[str]
+        if len(body) <= max_chunk_chars:
+            wrapped_pieces = [body]
+        else:
+            wrapped_pieces = _split_long_text(body, max_chunk_chars)
+        for piece in wrapped_pieces:
+            chunk_text = f"# {file_title} :: {key}\n\n```yaml\n{piece}\n```"
+            chunks.append(
+                Chunk(
+                    text=chunk_text,
+                    metadata={
+                        "category": category,
+                        "source": source,
+                        "title": key,
+                        "headings": [file_title, key],
+                        "tags": _extract_tags([key], source),
+                        "has_yaml": True,
+                        "kind": "code",
+                        "lang": "yaml",
+                        "wiki": wiki_label,
+                    },
+                )
+            )
+    return chunks

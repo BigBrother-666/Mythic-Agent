@@ -1,7 +1,7 @@
 """chunker 单元测试。"""
 from __future__ import annotations
 
-from app.rag.chunker import chunk_markdown, iter_wiki_files
+from app.rag.chunker import chunk_markdown, chunk_yaml_file, iter_wiki_files
 
 SAMPLE = """# Projectile Skill
 
@@ -89,3 +89,55 @@ def test_iter_wiki_files_skips_uploads(tmp_path) -> None:  # type: ignore[no-unt
     files = iter_wiki_files(tmp_path)
     assert len(files) == 1
     assert files[0].name == "Demon.md"
+
+
+# ---------- 多 wiki / 本地 examples ----------
+
+def test_chunk_markdown_infers_wiki_label_mythicmobs() -> None:
+    chunks = chunk_markdown(SAMPLE, source="MythicMobs.wiki/Skills/Mechanics/projectile.md")
+    assert chunks
+    assert chunks[0].metadata["wiki"] == "mythicmobs"
+    assert chunks[0].metadata["category"] == "mechanics"
+
+
+def test_chunk_markdown_infers_wiki_label_crucible() -> None:
+    chunks = chunk_markdown(SAMPLE, source="mythiccrucible.wiki/Skills/Mechanics/foo.md")
+    assert chunks
+    assert chunks[0].metadata["wiki"] == "crucible"
+    assert chunks[0].metadata["category"] == "mechanics"
+
+
+def test_chunk_yaml_file_splits_by_top_keys() -> None:
+    text = """\
+DeepSeaBoss:
+  Type: GUARDIAN
+  Health: 1200
+  Skills:
+  - skill{s=FrostBreath} @target
+
+DeepSeaBoss_FrostBreath:
+  Skills:
+  - freeze{ticks=80} @target
+
+# 注释行
+DeepSeaThrall:
+  Type: DROWNED
+  Health: 80
+"""
+    chunks = chunk_yaml_file(text, source="examples/mobs/deep_sea.yml")
+    titles = [c.metadata["title"] for c in chunks]
+    assert "DeepSeaBoss" in titles
+    assert "DeepSeaBoss_FrostBreath" in titles
+    assert "DeepSeaThrall" in titles
+    assert all(c.metadata["wiki"] == "local" for c in chunks)
+    assert all(c.metadata["category"] == "examples" for c in chunks)
+    assert all(c.has_yaml for c in chunks)
+    # YAML 内容必须完整保留
+    boss = next(c for c in chunks if c.metadata["title"] == "DeepSeaBoss")
+    assert "Type: GUARDIAN" in boss.text
+    assert "Health: 1200" in boss.text
+
+
+def test_chunk_yaml_file_empty_returns_empty() -> None:
+    assert chunk_yaml_file("", source="examples/x.yml") == []
+    assert chunk_yaml_file("# only comment\n", source="examples/x.yml") == []

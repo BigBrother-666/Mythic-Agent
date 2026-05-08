@@ -22,6 +22,7 @@ class FusedHit:
     source: str
     category: str
     tags: list[str]
+    wiki: str = "mythicmobs"
 
 
 def _tokenize(text: str) -> list[str]:
@@ -97,8 +98,12 @@ class HybridRetriever:
         query: str,
         top_k: int | None = None,
         category: str | None = None,
+        wiki: str | None = None,
     ) -> list[FusedHit]:
-        """对外检索接口；返回 RRF 融合后的命中。"""
+        """对外检索接口；返回 RRF 融合后的命中。
+
+        wiki ∈ {"mythicmobs","crucible","local",None}。None 表示不过滤（默认）。
+        """
         settings = get_settings()
         if top_k is None:
             top_k = settings.rag_top_k
@@ -107,7 +112,7 @@ class HybridRetriever:
         store = get_milvus_store()
 
         vector = await embedder.embed_query(query)
-        vec_hits = await store.search(vector, top_k=top_k * 3, category=category)
+        vec_hits = await store.search(vector, top_k=top_k * 3, category=category, wiki=wiki)
 
         bm25_pairs = self._bm25_search(query, top_k=top_k * 2)
 
@@ -127,6 +132,8 @@ class HybridRetriever:
             h = self._corpus_hits[idx]
             if category and h.category != category:
                 continue
+            if wiki and h.wiki != wiki:
+                continue
             key = f"{h.source}::{h.title}::{h.text[:64]}"
             scores[key] = scores.get(key, 0.0) + 1.0 / (rrf_k + rank + 1)
             keep.setdefault(key, h)
@@ -141,6 +148,7 @@ class HybridRetriever:
                 source=keep[k].source,
                 category=keep[k].category,
                 tags=keep[k].tags,
+                wiki=keep[k].wiki,
             )
             for k in ranked_keys
         ]

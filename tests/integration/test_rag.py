@@ -27,7 +27,7 @@ async def test_search_pipeline_with_mocks() -> None:
         def has_collection(self) -> bool:
             return True
 
-        async def search(self, vector, top_k=8, category=None):
+        async def search(self, vector, top_k=8, category=None, wiki=None):
             return fake_hits
 
         async def fetch_all_for_bm25(self):

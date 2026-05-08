@@ -24,6 +24,7 @@ class VectorHit:
     source: str
     category: str
     tags: list[str]
+    wiki: str = "mythicmobs"
 
 
 class MilvusStore:
@@ -69,12 +70,15 @@ class MilvusStore:
         schema = self._client.create_schema(auto_id=True, enable_dynamic_field=False)
         schema.add_field("id", DataType.INT64, is_primary=True)
         schema.add_field("embedding", DataType.FLOAT_VECTOR, dim=self._dim)
-        schema.add_field("text", DataType.VARCHAR, max_length=8000)
+        # Milvus VARCHAR 的 max_length 按 UTF-8 字节算（不是字符）。中文 3 byte/字符，
+        # 32000 字节大约能装 10000+ 汉字或更多英文，对单 chunk 完全够用。
+        schema.add_field("text", DataType.VARCHAR, max_length=32000)
         schema.add_field("title", DataType.VARCHAR, max_length=512)
         schema.add_field("source", DataType.VARCHAR, max_length=512)
         schema.add_field("category", DataType.VARCHAR, max_length=64)
-        schema.add_field("tags", DataType.VARCHAR, max_length=1024)
+        schema.add_field("tags", DataType.VARCHAR, max_length=2048)
         schema.add_field("has_yaml", DataType.BOOL)
+        schema.add_field("wiki", DataType.VARCHAR, max_length=32)
 
         index_params = self._client.prepare_index_params()
         index_params.add_index(
@@ -95,17 +99,31 @@ class MilvusStore:
             self._client.drop_collection(self._collection)
             logger.info("Dropped collection {}", self._collection)
 
+    @staticmethod
+    def _truncate_bytes(value: str, max_bytes: int) -> str:
+        """按 UTF-8 字节安全截断（不切坏多字节字符）。
+
+        Milvus VARCHAR 的 max_length 是字节数。直接 `s[:n]` 按字符切，遇到中文会膨胀 3 倍。
+        这里用 `encode('utf-8')[:n]` 截字节、再 `decode(errors='ignore')` 去掉被切坏的尾部。
+        """
+        encoded = value.encode("utf-8")
+        if len(encoded) <= max_bytes:
+            return value
+        return encoded[:max_bytes].decode("utf-8", errors="ignore")
+
     def _to_row(self, chunk: Chunk, vector: list[float]) -> dict[str, Any]:
         meta = chunk.metadata
-        text = chunk.text[:8000]
         return {
             "embedding": vector,
-            "text": text,
-            "title": str(meta.get("title", ""))[:512],
-            "source": str(meta.get("source", ""))[:512],
-            "category": str(meta.get("category", ""))[:64],
-            "tags": json.dumps(meta.get("tags", []), ensure_ascii=False)[:1024],
+            "text": self._truncate_bytes(chunk.text, 32000),
+            "title": self._truncate_bytes(str(meta.get("title", "")), 512),
+            "source": self._truncate_bytes(str(meta.get("source", "")), 512),
+            "category": self._truncate_bytes(str(meta.get("category", "")), 64),
+            "tags": self._truncate_bytes(
+                json.dumps(meta.get("tags", []), ensure_ascii=False), 2048
+            ),
             "has_yaml": bool(meta.get("has_yaml", False)),
+            "wiki": self._truncate_bytes(str(meta.get("wiki", "mythicmobs")), 32),
         }
 
     async def insert(self, chunks: list[Chunk], vectors: list[list[float]]) -> int:
@@ -124,15 +142,21 @@ class MilvusStore:
         vector: list[float],
         top_k: int = 8,
         category: str | None = None,
+        wiki: str | None = None,
     ) -> list[VectorHit]:
-        """按向量检索；可选 category 过滤。"""
-        filter_expr = f'category == "{category}"' if category else ""
+        """按向量检索；可选 category / wiki 过滤。"""
+        clauses: list[str] = []
+        if category:
+            clauses.append(f'category == "{category}"')
+        if wiki:
+            clauses.append(f'wiki == "{wiki}"')
+        filter_expr = " and ".join(clauses)
         result = await asyncio.to_thread(
             self._client.search,
             collection_name=self._collection,
             data=[vector],
             limit=top_k,
-            output_fields=["text", "title", "source", "category", "tags"],
+            output_fields=["text", "title", "source", "category", "tags", "wiki"],
             filter=filter_expr,
         )
         hits: list[VectorHit] = []
@@ -150,6 +174,7 @@ class MilvusStore:
                     source=entity.get("source", ""),
                     category=entity.get("category", ""),
                     tags=tags,
+                    wiki=entity.get("wiki", "mythicmobs"),
                 )
             )
         return hits
@@ -166,7 +191,7 @@ class MilvusStore:
                 self._client.query,
                 collection_name=self._collection,
                 filter="",
-                output_fields=["text", "title", "source", "category", "tags"],
+                output_fields=["text", "title", "source", "category", "tags", "wiki"],
                 limit=batch,
                 offset=cursor,
             )
@@ -185,6 +210,7 @@ class MilvusStore:
                         source=entity.get("source", ""),
                         category=entity.get("category", ""),
                         tags=tags,
+                        wiki=entity.get("wiki", "mythicmobs"),
                     )
                 )
             if len(res) < batch:

@@ -83,7 +83,8 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - ./MythicMobs.wiki:/wiki:ro
+      - ./wiki:/wiki:ro
+      - ./examples:/examples:ro
       - hf_cache:/home/app/.cache/huggingface
     depends_on:
       milvus:
