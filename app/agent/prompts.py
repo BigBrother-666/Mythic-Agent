@@ -1,33 +1,73 @@
-"""所有系统 / 角色 prompts 集中管理；不允许在其他模块硬编码 wiki 内容。"""
+"""所有系统 / 角色 prompts 集中管理；不允许在其他模块硬编码 wiki 内容。
+
+按 intent 拆分 generator prompt：
+- mob   → MOB_GENERATOR_PROMPT     （MythicMobs 主 wiki）
+- item  → ITEM_GENERATOR_PROMPT    （MythicMobs Items + MythicCrucible 物品扩展）
+- skill → SKILL_GENERATOR_PROMPT   （metaskill 单独定义；不带 Type/Material）
+
+planner 的输出 JSON 同时驱动 search_queries（决定 retriever 拉哪个 wiki 的内容）。
+"""
 from __future__ import annotations
 
-SYSTEM_PROMPT = """你是 MythicMobs 配置生成助手，专注于帮助 Minecraft 服务器主使用 MythicMobs 插件创建怪物 (Mob)、物品 (Item) 和技能 (Skill) 的 YAML 配置。
+# ============================================================
+# 系统 prompt：贯穿整个会话
+# ============================================================
+SYSTEM_PROMPT = """你是 MythicMobs / MythicCrucible 配置生成助手，专注于帮助 Minecraft 服务器主创建 Mob、Item、Skill (metaskill) 的 YAML 配置。
 
 请严格遵循以下原则：
-1. 优先参考 RAG 检索到的官方 Wiki 文档片段，把它视作权威。
-2. 不得编造不存在的 Mechanics / Targeters / Conditions / Triggers，遇到不确定的就用 wiki_search 工具查证。
-3. 不得生成非法字段；保持 MythicMobs 文档中规定的属性名大小写。
+1. 优先参考 RAG 检索到的官方 Wiki 文档片段，把它视作权威。来源会标注 source / wiki，注意区分 mythicmobs 与 crucible：
+   - mythicmobs：mob、技能机制、目标器、条件、触发器（@target / ~onTimer 等）
+   - crucible：物品的额外机制 / 触发器 / 家具 / 合成（~onUse / ~onLeftclick 等仅在物品上可用的触发器）
+2. 不得编造不存在的 Mechanics / Targeters / Conditions / Triggers，遇到不确定的就用 wiki_search 查证。
+3. 不得生成非法字段；保持 wiki 文档中规定的属性名大小写。
 4. 必须用中文向用户解释关键配置（每个非平凡字段的作用）。
 5. 必须给出至少 2 条使用建议或扩展方向。
 6. 输出的 YAML 必须可以被 ruamel.yaml 解析；缩进为 2 个空格。
 7. 当用户的需求模糊时，先做合理默认选择，不要反复追问；可以在「建议」里指出可以调整的地方。
 """
 
-PLANNER_PROMPT = """你是 Planner。读完用户输入后，输出一个 JSON 对象：
+
+# ============================================================
+# Planner：意图分类 + 检索计划
+# ============================================================
+PLANNER_PROMPT = """你是 Planner。读完用户输入后，输出一个 JSON 对象（不要任何其他文字）：
+
 {{
   "intent": "mob | item | skill | chat",
   "search_queries": ["query1", "query2", ...],
   "needs_rag": true | false,
-  "name": "可选的 YAML 顶层 key（英文，PascalCase）",
-  "notes": "对生成器的提示"
+  "name": "YAML 顶层 key，PascalCase 或下划线，按 intent 给个合理默认",
+  "notes": "对生成器的提示（中文，1-2 句即可）"
 }}
-- 若用户只是闲聊或问知识，把 intent 设为 chat；search_queries 仍可为空。
-- 若用户要造怪物/物品/技能，至少给出 2 条 search_queries，每条不超过 12 个英文单词，覆盖不同的关键概念（如类型、技能机制、状态效果）。
-- 不要解释，只输出 JSON。
-- 用户输入：{user_input}"""
+
+intent 判定规则（按优先级匹配）：
+- "item"  —— 用户想要创建一个**物品**（武器、消耗品、合成材料、家具、护符等）。关键词：物品、装备、武器、剑、消耗品、合成、Recipe、Crucible、家具、皮肤、CustomModel
+- "skill" —— 用户只想要一个**独立的 metaskill**（不绑定到某个 mob / item，纯技能片段）。关键词：技能、技能链、metaskill、火球术、treasure 之类没有载体的咒语
+- "mob"   —— 用户想要创建一个**怪物 / Boss / 召唤生物**（含其附属技能链）。关键词：怪物、Boss、生物、Mob、召唤、敌人
+- "chat"  —— 闲聊或纯知识问答（"projectile 的 highAccuracyMode 是什么意思？"），不需要生成任何 YAML
+
+search_queries 规则：
+- intent=mob：覆盖「mob 的 Type、特殊技能、视觉/音效、AI」3-4 个角度
+- intent=item：覆盖「Material/Id、Skills 触发器（onUse/onLeftclick/onConsume）、Crucible 特性（Furniture/Recipe）」3-4 个角度
+- intent=skill：覆盖技能用到的核心 mechanics + targeter + condition
+- intent=chat：留空数组
+- 每条 query 不超过 12 个英文单词，使用英文以匹配 wiki 内容
+
+name 默认值：
+- mob → 形如 "DeepSeaBoss"
+- item → 形如 "FrostBlade"
+- skill → 形如 "FrostNova"
+- chat → ""
+
+用户输入：
+{user_input}
+"""
 
 
-GENERATOR_PROMPT = """根据以下信息生成 MythicMobs YAML：
+# ============================================================
+# Generator：按 intent 三套独立模板
+# ============================================================
+_GEN_HEADER = """根据以下信息生成合法的 MythicMobs / MythicCrucible YAML：
 
 用户需求：
 {user_input}
@@ -36,29 +76,161 @@ GENERATOR_PROMPT = """根据以下信息生成 MythicMobs YAML：
 建议的对象名: {name}
 Planner 备注: {notes}
 
-参考的 Wiki 片段（来自 RAG 检索）：
+参考的 Wiki 片段（来自 RAG 检索；前面方括号内是序号）：
 ---
 {context}
 ---
-
-请输出严格的 markdown 结构，包含三个段：
-
-## YAML
-```yaml
-<这里是 MythicMobs 配置；顶层 key 用 {name}；缩进 2 空格>
-```
-
-## 解释
-- 字段1：作用说明
-- 字段2：作用说明
-...
-
-## 建议
-- 建议1
-- 建议2
 """
 
 
+MOB_GENERATOR_PROMPT = (
+    _GEN_HEADER
+    + """
+# 任务：生成一个 Mob。**请把 mob 主体 + 它引用的所有 metaskill 写在同一份 YAML 里**——这是 MythicMobs 的常见组织方式，校验器接受这种混写。
+
+输出格式严格按下面三段：
+
+## YAML
+```yaml
+{name}:
+  Type: <vanilla 实体类型，如 ZOMBIE / GUARDIAN / BLAZE>
+  Display: '<彩色名称，可用 & 颜色码或 <#hex>>'
+  Health: <数字>
+  Damage: <数字>
+  Faction: <可选>
+  Options:
+    AlwaysShowName: <bool>
+    PreventOtherDrops: <bool>
+    MovementSpeed: <数字>
+  AIGoalSelectors:    # 可选，覆盖默认 AI
+  - <selector>
+  AITargetSelectors:
+  - <selector>
+  Skills:
+  - <mechanic>{{...}} <targeter> ~<trigger> ?<condition>
+  - skill{{s=<引用的 metaskill 名>}} @target ~onTimer:60
+  Drops:              # 可选
+  - <item> 1 0.5
+
+# 在下面接着写所有被 mob 引用的 metaskill（如果有）
+<引用的 metaskill 名>:
+  Skills:
+  - <mechanic> @target
+```
+
+## 解释
+- 重要字段逐条说明（中文，2-6 条）
+
+## 建议
+- 至少 2 条扩展或调参方向
+"""
+)
+
+
+ITEM_GENERATOR_PROMPT = (
+    _GEN_HEADER
+    + """
+# 任务：生成一个 MythicMobs Item（含 Crucible 增强）。物品的特殊触发器（~onUse / ~onLeftclick / ~onRightclick / ~onConsume）属于 Crucible 范畴；如果 RAG 命中里有 wiki=crucible 的片段，**优先**参考它们。
+
+输出格式严格按下面三段：
+
+## YAML
+```yaml
+{name}:
+  Id: <vanilla material 名小写，如 diamond_sword / blaze_rod / cocoa_beans>
+  Display: '<彩色名称>'
+  Lore:                # 可选；推荐用来写描述/获取途径
+  - '<行1>'
+  - '<行2>'
+  Model: <可选；CustomModelData 数字>
+  Group: <可选>
+  Attributes:          # 可选，属性加成
+    MainHand:
+      Damage: <数字>
+  Enchantments:        # 可选
+  - SHARPNESS:5
+  Options:             # 可选
+    Unbreakable: <bool>
+  Recipes:             # Crucible：合成配方
+    SHAPED:
+      Type: SHAPED
+      Amount: 1
+      Ingredients:
+      - <a> | <b> | <c>
+      - <d> | <e> | <f>
+      - <g> | <h> | <i>
+  Skills:              # Crucible：物品触发器
+  - skill{{s=<触发的 metaskill>}} @self ~onUse ?holding{{m={name}}}
+  - skill{{s=<另一个>}} @target ~onLeftclick ?crouching
+
+# 接着写所有被引用的 metaskill（如果有）
+<引用的 metaskill 名>:
+  Skills:
+  - <mechanic> @<targeter>
+```
+
+## 解释
+- 重要字段逐条说明（中文）；触发器 ~onUse / ~onLeftclick 等要说明触发时机
+- 必要时指出 Crucible 是必装插件
+
+## 建议
+- 至少 2 条扩展方向（材质包、合成、限制条件等）
+"""
+)
+
+
+SKILL_GENERATOR_PROMPT = (
+    _GEN_HEADER
+    + """
+# 任务：生成一个独立的 metaskill（不带 Type / Material / Id）。如果用户描述需要多个相互调用的 metaskill，把它们一起写在同一份 YAML 里。
+
+输出格式严格按下面三段：
+
+## YAML
+```yaml
+{name}:
+  Cooldown: <可选；秒>
+  TargetConditions:    # 可选；技能选定目标时的过滤
+  - <condition>
+  Conditions:          # 可选；释放者条件
+  - <condition>
+  Skills:
+  - <mechanic>{{...}} <targeter> ?<inline-condition>
+  - delay <ticks>
+  - skill{{s=<子 metaskill>}} @target
+
+# 如有引用其他 metaskill，紧接着定义
+<子 metaskill 名>:
+  Skills:
+  - <mechanic> @<targeter>
+```
+
+## 解释
+- 重要字段逐条说明（中文）
+
+## 建议
+- 至少 2 条扩展或调参方向
+"""
+)
+
+
+def get_generator_prompt(intent: str) -> str:
+    """根据 intent 选择对应的 generator prompt 模板。"""
+    if intent == "item":
+        return ITEM_GENERATOR_PROMPT
+    if intent == "skill":
+        return SKILL_GENERATOR_PROMPT
+    # mob 或未识别都走 mob 模板（最通用、最完整）
+    return MOB_GENERATOR_PROMPT
+
+
+# 兼容老调用：保留 GENERATOR_PROMPT 指向 mob 模板（旧测试 / 旧代码使用）
+GENERATOR_PROMPT = MOB_GENERATOR_PROMPT
+
+
+# ============================================================
+# Validator fix loop
+# ============================================================
 VALIDATOR_FIX_PROMPT = """以下 YAML 校验失败：
 错误：
 {errors}
@@ -76,5 +248,9 @@ __all__ = [
     "SYSTEM_PROMPT",
     "PLANNER_PROMPT",
     "GENERATOR_PROMPT",
+    "MOB_GENERATOR_PROMPT",
+    "ITEM_GENERATOR_PROMPT",
+    "SKILL_GENERATOR_PROMPT",
+    "get_generator_prompt",
     "VALIDATOR_FIX_PROMPT",
 ]

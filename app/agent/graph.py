@@ -20,6 +20,7 @@ from app.agent.prompts import (
     PLANNER_PROMPT,
     SYSTEM_PROMPT,
     VALIDATOR_FIX_PROMPT,
+    get_generator_prompt,
 )
 from app.agent.tools import format_yaml, validate_yaml
 from app.core.config import get_settings
@@ -138,40 +139,69 @@ def _split_explanation_suggestions(text: str) -> tuple[str, list[str]]:
     return explanation, suggestions
 
 
+# intent → 默认顶层 key 名
+_DEFAULT_NAME_BY_INTENT = {
+    "mob": "MyCustomMob",
+    "item": "MyCustomItem",
+    "skill": "MyCustomSkill",
+    "chat": "",
+}
+
+
 async def planner_node(state: AgentState) -> AgentState:
     """Planner：让 LLM 解析用户意图并拟定检索计划。"""
     llm = get_llm()
     prompt = PLANNER_PROMPT.format(user_input=state["user_input"])
     resp = await llm.ainvoke([SystemMessage(content=SYSTEM_PROMPT), HumanMessage(content=prompt)])
     parsed = _extract_json(resp.content if isinstance(resp.content, str) else str(resp.content))
-    intent: Intent = parsed.get("intent", "chat") if parsed.get("intent") in {"mob", "item", "skill", "chat"} else "chat"
+    raw_intent = parsed.get("intent")
+    intent: Intent = raw_intent if raw_intent in {"mob", "item", "skill", "chat"} else "chat"
+    default_name = _DEFAULT_NAME_BY_INTENT.get(intent, "")
     return {
         **state,
         "intent": intent,
-        "name": parsed.get("name") or "MyCustomMob",
+        "name": parsed.get("name") or default_name,
         "notes": parsed.get("notes") or "",
         "search_queries": parsed.get("search_queries") or [],
     }
 
 
 async def retriever_node(state: AgentState) -> AgentState:
-    """对每个 search query 取 top-4 片段，去重合并。"""
+    """对每个 search query 取 top-4 片段，去重合并。
+
+    intent=item 时**额外**对每条 query 在 wiki=crucible 范围里再检索一次，
+    确保物品触发器 (~onUse / Recipes / Furniture) 这类只在 crucible 出现的内容能命中。
+    """
     queries = state.get("search_queries") or [state["user_input"]]
+    intent = state.get("intent", "mob")
     seen_keys: set[str] = set()
     merged: list[dict[str, Any]] = []
-    for q in queries[:4]:  # 最多 4 条避免爆 context
-        try:
-            hits = await wiki_search_dict(q, top_k=4)
-        except Exception as e:  # noqa: BLE001
-            logger.warning("wiki_search failed for {}: {}", q, e)
-            continue
+
+    async def _absorb(hits: list[dict[str, Any]]) -> None:
         for h in hits:
             key = f"{h['source']}::{h['title']}::{h['text'][:64]}"
             if key in seen_keys:
                 continue
             seen_keys.add(key)
             merged.append(h)
-    return {**state, "retrieved": merged[:12]}
+
+    for q in queries[:4]:  # 最多 4 条避免爆 context
+        try:
+            await _absorb(await wiki_search_dict(q, top_k=4))
+        except Exception as e:  # noqa: BLE001
+            logger.warning("wiki_search failed for {}: {}", q, e)
+            continue
+        if intent == "item":
+            try:
+                await _absorb(await wiki_search_dict(q, top_k=2, category=None))
+                # 用 wiki=crucible 过滤再取 2 条专题命中
+                await _absorb(
+                    await wiki_search_dict(q + " crucible", top_k=2)
+                )
+            except Exception as e:  # noqa: BLE001
+                logger.warning("crucible wiki_search failed for {}: {}", q, e)
+
+    return {**state, "retrieved": merged[:14]}
 
 
 def _format_context(hits: list[dict[str, Any]], limit: int = 6000) -> str:
@@ -188,7 +218,7 @@ def _format_context(hits: list[dict[str, Any]], limit: int = 6000) -> str:
 
 
 async def generator_node(state: AgentState) -> AgentState:
-    """生成 YAML + 解释 + 建议。"""
+    """生成 YAML + 解释 + 建议；按 intent 选不同模板。"""
     llm = get_llm()
     if state.get("intent") == "chat":
         # 闲聊分支：直接用 SYSTEM_PROMPT 回答，不强制 YAML 模板。
@@ -198,11 +228,14 @@ async def generator_node(state: AgentState) -> AgentState:
         text = resp.content if isinstance(resp.content, str) else str(resp.content)
         return {**state, "raw_output": text, "yaml_text": "", "explanation": text, "suggestions": [], "final_message": text}
 
+    intent = state.get("intent", "mob")
+    name = state.get("name") or _DEFAULT_NAME_BY_INTENT.get(intent, "MyCustom")
+    template = get_generator_prompt(intent)
     context = _format_context(state.get("retrieved") or [])
-    prompt = GENERATOR_PROMPT.format(
+    prompt = template.format(
         user_input=state["user_input"],
-        intent=state.get("intent", "mob"),
-        name=state.get("name") or "MyCustomMob",
+        intent=intent,
+        name=name,
         notes=state.get("notes", ""),
         context=context,
     )
