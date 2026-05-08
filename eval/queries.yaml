@@ -1,0 +1,231 @@
+# MythicMobs Agent — RAG 评估集 (30 题)
+#
+# 每题字段：
+#   id              —— 短标识符
+#   query           —— 自然语言查询（中或英；模拟真实用户输入的形态）
+#   expected_sources —— **任意一条**命中即算该题召回成功（支持子串匹配）
+#   expected_wiki   —— mythicmobs / crucible / any
+#   tags            —— 仅用于分组报表，不参与评分
+#
+# 选题原则：
+#   - 一半中文、一半英文，覆盖中英 embedding 健康度
+#   - 涵盖 mob / item / metaskill / mechanic / targeter / condition / trigger 7 类
+#   - 至少 5 题专门考 crucible（onUse、Recipes、Furniture、Bags 等）
+#   - 至少 5 题是「短关键词」型，至少 5 题是「长描述」型，避免数据偏置
+
+cases:
+  # ---------- 机制 (Mechanics) ----------
+  - id: M01
+    query: How to make a projectile that fires fireballs and hits enemies in radius
+    expected_sources: ["Skills/Mechanics/projectile.md"]
+    expected_wiki: mythicmobs
+    tags: [mechanic, projectile, en]
+
+  - id: M02
+    query: 让目标冰冻几秒钟的技能
+    expected_sources: ["Skills/Mechanics/freeze.md"]
+    expected_wiki: mythicmobs
+    tags: [mechanic, freeze, zh]
+
+  - id: M03
+    query: summon mob skill mythicmobs
+    expected_sources: ["Skills/Mechanics/summon.md"]
+    expected_wiki: mythicmobs
+    tags: [mechanic, summon, en]
+
+  - id: M04
+    query: aura that ticks every second and damages targets
+    expected_sources: ["Skills/Mechanics/aura.md", "Skills/Mechanics/AuraComponents"]
+    expected_wiki: mythicmobs
+    tags: [mechanic, aura, en]
+
+  - id: M05
+    query: 创建 boss 血条 bossbar 头顶进度条
+    expected_sources: ["Skills/Mechanics/barcreate.md", "Mobs/BossBar.md"]
+    expected_wiki: mythicmobs
+    tags: [mechanic, bossbar, zh]
+
+  - id: M06
+    query: damage mechanic deal flat damage to target
+    expected_sources: ["Skills/Mechanics/damage.md"]
+    expected_wiki: mythicmobs
+    tags: [mechanic, damage, en]
+
+  - id: M07
+    query: how to chain skill calls with delay between them
+    expected_sources: ["Skills/Mechanics/delay.md", "Skills/Mechanics/skill.md"]
+    expected_wiki: mythicmobs
+    tags: [mechanic, delay, en]
+
+  - id: M08
+    query: 闪电劈击 lightning strike effect
+    expected_sources: ["Skills/Mechanics/lightning.md", "Skills/Mechanics/FakeLightning.md"]
+    expected_wiki: mythicmobs
+    tags: [mechanic, lightning, mixed]
+
+  - id: M09
+    query: missile homing skill that locks onto target
+    expected_sources: ["Skills/Mechanics/missile.md"]
+    expected_wiki: mythicmobs
+    tags: [mechanic, missile, en]
+
+  - id: M10
+    query: 怎么让 mob 在血量低于 30% 时进入狂暴变身
+    expected_sources:
+      - Skills/Conditions/health.md
+      - Skills/Mechanics/setvariable.md
+      - Skills/Mechanics/skill.md
+    expected_wiki: mythicmobs
+    tags: [composite, condition, zh]
+
+  # ---------- 目标器 (Targeters) ----------
+  - id: T01
+    query: targeter that selects entities in a radius around the caster
+    expected_sources: ["Skills/Targeters/EntitiesInRadius.md"]
+    expected_wiki: mythicmobs
+    tags: [targeter, en]
+
+  - id: T02
+    query: 选取以原点为中心一定半径内的所有玩家
+    expected_sources:
+      - Skills/Targeters/EntitiesNearOrigin.md
+      - Skills/Targeters/EntitiesInRadius.md
+    expected_wiki: mythicmobs
+    tags: [targeter, zh]
+
+  - id: T03
+    query: how to target blocks in a ring near origin
+    expected_sources:
+      - Skills/Targeters/EntitiesInRing.md
+      - Skills/Targeters/EntitiesInRingNearOrigin.md
+      - Skills/Targeters/BlocksInRadius.md
+    expected_wiki: mythicmobs
+    tags: [targeter, en]
+
+  # ---------- 条件 (Conditions) ----------
+  - id: C01
+    query: condition check distance to target less than 10
+    expected_sources: ["Skills/Conditions/distance.md"]
+    expected_wiki: mythicmobs
+    tags: [condition, en]
+
+  - id: C02
+    query: 检查目标当前血量百分比
+    expected_sources: ["Skills/Conditions/health.md"]
+    expected_wiki: mythicmobs
+    tags: [condition, zh]
+
+  - id: C03
+    query: condition check player is holding a specific item id
+    expected_sources: ["Skills/Conditions/hasItem.md"]
+    expected_wiki: mythicmobs
+    tags: [condition, en]
+
+  # ---------- 触发器 (Triggers) ----------
+  - id: TR01
+    query: trigger when mob takes damage
+    expected_sources: ["Skills/Triggers/onDamaged.md"]
+    expected_wiki: mythicmobs
+    tags: [trigger, en]
+
+  - id: TR02
+    query: 攻击时触发的 skill 触发器
+    expected_sources: ["Skills/Triggers/onAttack.md"]
+    expected_wiki: mythicmobs
+    tags: [trigger, zh]
+
+  # ---------- Mob 配置层 ----------
+  - id: B01
+    query: how to define custom AI goal selectors and target selectors
+    expected_sources:
+      - Mobs/Custom-AI.md
+      - Mobs/ai
+    expected_wiki: mythicmobs
+    tags: [mob, ai, en]
+
+  - id: B02
+    query: mob faction control hostile relationships
+    expected_sources: ["Mobs/Factions.md"]
+    expected_wiki: mythicmobs
+    tags: [mob, faction, en]
+
+  - id: B03
+    query: 给 mob 套装备 武器 盔甲
+    expected_sources: ["Mobs/Equipment.md"]
+    expected_wiki: mythicmobs
+    tags: [mob, equipment, zh]
+
+  - id: B04
+    query: power level scaling for stronger variants
+    expected_sources:
+      - Mobs/Power-Level.md
+      - Mobs/Power.md
+    expected_wiki: mythicmobs
+    tags: [mob, power, en]
+
+  # ---------- Item / Crucible ----------
+  - id: I01
+    query: 创建一个右键使用消耗的物品技能
+    expected_sources:
+      - wiki/mythiccrucible.wiki/Skills/Triggers/onUse.md
+      - mythiccrucible.wiki/Skills/Triggers/onUse.md
+    expected_wiki: crucible
+    tags: [item, crucible, trigger, zh]
+
+  - id: I02
+    query: how to define crafting recipe shaped 3x3
+    expected_sources:
+      - mythiccrucible.wiki/Recipes
+      - mythiccrucible.wiki/Recipes.md
+    expected_wiki: crucible
+    tags: [item, recipe, en]
+
+  - id: I03
+    query: custom furniture block sit feature
+    expected_sources:
+      - mythiccrucible.wiki/Furniture
+      - mythiccrucible.wiki/Furniture.md
+      - mythiccrucible.wiki/Skills/Triggers/onBlockSit.md
+    expected_wiki: crucible
+    tags: [item, furniture, en]
+
+  - id: I04
+    query: 物品左键点击触发的技能
+    expected_sources:
+      - mythiccrucible.wiki/Skills/Triggers/onAttack.md
+      - mythiccrucible.wiki/Skills/Triggers
+    expected_wiki: crucible
+    tags: [item, crucible, trigger, zh]
+
+  - id: I05
+    query: item attributes damage main hand
+    expected_sources: ["Items/Attributes.md"]
+    expected_wiki: mythicmobs
+    tags: [item, attributes, en]
+
+  - id: I06
+    query: ammo and bag system for survival items
+    expected_sources:
+      - mythiccrucible.wiki/Ammo.md
+      - mythiccrucible.wiki/Bags.md
+    expected_wiki: crucible
+    tags: [item, crucible, en]
+
+  # ---------- 综合 / metaskill ----------
+  - id: S01
+    query: how to write a metaskill with cooldown and condition
+    expected_sources:
+      - Skills/Skills.md
+      - Skills/Metaskills.md
+      - Skills/Conditions.md
+    expected_wiki: mythicmobs
+    tags: [metaskill, en]
+
+  - id: S02
+    query: 多阶段 boss 用变量切换不同技能
+    expected_sources:
+      - Skills/Mechanics/setvariable.md
+      - Skills/Mechanics/variableadd.md
+      - Skills/Mechanics/variableskill.md
+    expected_wiki: mythicmobs
+    tags: [metaskill, variables, zh]
