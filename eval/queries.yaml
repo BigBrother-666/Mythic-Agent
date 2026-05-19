@@ -1,4 +1,4 @@
-# MythicMobs Agent — RAG 评估集 (30 题)
+# MythicMobs Agent — RAG 评估集 (133 题)
 #
 # 每题字段：
 #   id              —— 短标识符
@@ -8,13 +8,16 @@
 #   tags            —— 仅用于分组报表，不参与评分
 #
 # 选题原则：
-#   - 一半中文、一半英文，覆盖中英 embedding 健康度
-#   - 涵盖 mob / item / metaskill / mechanic / targeter / condition / trigger 7 类
-#   - 至少 5 题专门考 crucible（onUse、Recipes、Furniture、Bags 等）
-#   - 至少 5 题是「短关键词」型，至少 5 题是「长描述」型，避免数据偏置
+#   - 中英文均衡，覆盖中英 embedding 健康度
+#   - 涵盖 mob / item / metaskill / mechanic / targeter / condition / trigger / drop 8 类
+#   - crucible 专题题 ≥ 20（onUse / onConsume / Recipes / Furniture / Bags / Ammo 等）
+#   - 短关键词、长描述、组合需求三种形态均有
+#   - 命名误写、近义词、模糊描述各保留一部分，用于压测 hybrid 检索鲁棒性
 
 cases:
-  # ---------- 机制 (Mechanics) ----------
+  # ============================================================
+  # 机制 (Mechanics) — M01-M35
+  # ============================================================
   - id: M01
     query: How to make a projectile that fires fireballs and hits enemies in radius
     expected_sources: ["Skills/Mechanics/projectile.md"]
@@ -78,7 +81,187 @@ cases:
     expected_wiki: mythicmobs
     tags: [composite, condition, zh]
 
-  # ---------- 目标器 (Targeters) ----------
+  - id: M11
+    query: 治疗 mob 自身血量回复一定值
+    expected_sources: ["Skills/Mechanics/heal.md", "Skills/Mechanics/healpercent.md"]
+    expected_wiki: mythicmobs
+    tags: [mechanic, heal, zh]
+
+  - id: M12
+    query: explosion mechanic with custom yield
+    expected_sources: ["Skills/Mechanics/explosion.md", "Skills/Mechanics/FakeExplosion.md"]
+    expected_wiki: mythicmobs
+    tags: [mechanic, explosion, en]
+
+  - id: M13
+    query: 把目标推开 击退效果
+    expected_sources:
+      - Skills/Mechanics/velocity.md
+      - Skills/Mechanics/propel.md
+      - Skills/Mechanics/forcepull.md
+    expected_wiki: mythicmobs
+    tags: [mechanic, velocity, zh]
+
+  - id: M14
+    query: teleport caster to target location
+    expected_sources:
+      - Skills/Mechanics/teleport.md
+      - Skills/Mechanics/teleportto.md
+    expected_wiki: mythicmobs
+    tags: [mechanic, teleport, en]
+
+  - id: M15
+    query: 给目标加 buff potion effect 持续时间
+    expected_sources: ["Skills/Mechanics/potion.md", "Skills/Mechanics/potionclear.md"]
+    expected_wiki: mythicmobs
+    tags: [mechanic, potion, zh]
+
+  - id: M16
+    query: send title message to player on screen
+    expected_sources: ["Skills/Mechanics/SendTitle.md", "Skills/Mechanics/sendactionmessage.md"]
+    expected_wiki: mythicmobs
+    tags: [mechanic, message, en]
+
+  - id: M17
+    query: 给玩家发聊天栏消息 message
+    expected_sources: ["Skills/Mechanics/message.md", "Skills/Mechanics/randommessage.md"]
+    expected_wiki: mythicmobs
+    tags: [mechanic, message, zh]
+
+  - id: M18
+    query: shoot fireball mechanic burning projectile
+    expected_sources:
+      - Skills/Mechanics/shootfireball.md
+      - Skills/Mechanics/shoot.md
+    expected_wiki: mythicmobs
+    tags: [mechanic, fireball, en]
+
+  - id: M19
+    query: 怎么把一个 mechanic 重复执行多次
+    expected_sources:
+      - Skills/Mechanics/ForEach.md
+      - Skills/Mechanics/ForEachValue.md
+      - Skills/Mechanics/ForEachPin.md
+    expected_wiki: mythicmobs
+    tags: [mechanic, foreach, zh]
+
+  - id: M20
+    query: cast another metaskill from inside this one
+    expected_sources: ["Skills/Mechanics/skill.md", "Skills/Mechanics/cast.md"]
+    expected_wiki: mythicmobs
+    tags: [mechanic, cast, en]
+
+  - id: M21
+    query: 在指定位置生成粒子效果
+    expected_sources:
+      - Skills/Mechanics/Particle.md
+      - Skills/Mechanics/ParticleSphere.md
+      - Skills/Mechanics/ParticleRing.md
+    expected_wiki: mythicmobs
+    tags: [mechanic, particle, zh]
+
+  - id: M22
+    query: play sound effect at location
+    expected_sources: ["Skills/Mechanics/Sound.md", "Skills/Mechanics/StopSound.md"]
+    expected_wiki: mythicmobs
+    tags: [mechanic, sound, en]
+
+  - id: M23
+    query: ignite target set on fire
+    expected_sources: ["Skills/Mechanics/ignite.md", "Skills/Mechanics/extinguish.md"]
+    expected_wiki: mythicmobs
+    tags: [mechanic, ignite, en]
+
+  - id: M24
+    query: 让目标晕眩 stun 无法移动
+    expected_sources: ["Skills/Mechanics/stun.md", "Skills/Mechanics/Fear.md"]
+    expected_wiki: mythicmobs
+    tags: [mechanic, stun, zh]
+
+  - id: M25
+    query: pull target toward caster
+    expected_sources:
+      - Skills/Mechanics/pull.md
+      - Skills/Mechanics/forcepull.md
+      - Skills/Mechanics/leap.md
+    expected_wiki: mythicmobs
+    tags: [mechanic, pull, en]
+
+  - id: M26
+    query: 玩家执行控制台命令的 mechanic
+    expected_sources: ["Skills/Mechanics/command.md"]
+    expected_wiki: mythicmobs
+    tags: [mechanic, command, zh]
+
+  - id: M27
+    query: variable add or subtract numeric value
+    expected_sources:
+      - Skills/Mechanics/variableadd.md
+      - Skills/Mechanics/variablesubtract.md
+      - Skills/Mechanics/variablemath.md
+    expected_wiki: mythicmobs
+    tags: [mechanic, variable, en]
+
+  - id: M28
+    query: 设置变量 setvariable 字符串数字
+    expected_sources: ["Skills/Mechanics/setvariable.md", "Skills/Mechanics/variableskill.md"]
+    expected_wiki: mythicmobs
+    tags: [mechanic, variable, zh]
+
+  - id: M29
+    query: spawn a beam of light or guardian laser
+    expected_sources:
+      - Skills/Mechanics/beam.md
+      - Skills/Mechanics/GuardianBeam.md
+      - Skills/Mechanics/EnderBeam.md
+    expected_wiki: mythicmobs
+    tags: [mechanic, beam, en]
+
+  - id: M30
+    query: 给 mob 套上伪装 看起来像另一种生物
+    expected_sources:
+      - Skills/Mechanics/disguise.md
+      - Skills/Mechanics/disguisetarget.md
+      - Skills/Mechanics/undisguise.md
+      - Mobs/Disguises.md
+    expected_wiki: mythicmobs
+    tags: [mechanic, disguise, zh]
+
+  - id: M31
+    query: jump or leap forward skill
+    expected_sources: ["Skills/Mechanics/jump.md", "Skills/Mechanics/leap.md"]
+    expected_wiki: mythicmobs
+    tags: [mechanic, jump, en]
+
+  - id: M32
+    query: 取消正在进行的技能 cancelskill
+    expected_sources: ["Skills/Mechanics/CancelSkill.md", "Skills/Mechanics/cancelevent.md"]
+    expected_wiki: mythicmobs
+    tags: [mechanic, cancel, zh]
+
+  - id: M33
+    query: change mob name display custom text
+    expected_sources: ["Skills/Mechanics/setname.md"]
+    expected_wiki: mythicmobs
+    tags: [mechanic, setname, en]
+
+  - id: M34
+    query: 用百分比血量伤害目标 真实伤害
+    expected_sources:
+      - Skills/Mechanics/percentdamage.md
+      - Skills/Mechanics/damage.md
+    expected_wiki: mythicmobs
+    tags: [mechanic, percentdamage, zh]
+
+  - id: M35
+    query: spawn falling block visual effect with material
+    expected_sources: ["Skills/Mechanics/SummonFallingBlock.md", "Skills/Mechanics/PushBlock.md"]
+    expected_wiki: mythicmobs
+    tags: [mechanic, fallingblock, en]
+
+  # ============================================================
+  # 目标器 (Targeters) — T01-T15
+  # ============================================================
   - id: T01
     query: targeter that selects entities in a radius around the caster
     expected_sources: ["Skills/Targeters/EntitiesInRadius.md"]
@@ -90,6 +273,7 @@ cases:
     expected_sources:
       - Skills/Targeters/EntitiesNearOrigin.md
       - Skills/Targeters/EntitiesInRadius.md
+      - Skills/Targeters/PlayersNearOrigin.md
     expected_wiki: mythicmobs
     tags: [targeter, zh]
 
@@ -102,7 +286,105 @@ cases:
     expected_wiki: mythicmobs
     tags: [targeter, en]
 
-  # ---------- 条件 (Conditions) ----------
+  - id: T04
+    query: targeter that returns the caster itself
+    expected_sources: ["Skills/Targeters/Self.md", "Skills/Targeters/SelfLocation.md"]
+    expected_wiki: mythicmobs
+    tags: [targeter, self, en]
+
+  - id: T05
+    query: 选取触发这次技能的实体 trigger 目标
+    expected_sources: ["Skills/Targeters/Trigger.md", "Skills/Targeters/TriggerLocation.md"]
+    expected_wiki: mythicmobs
+    tags: [targeter, trigger, zh]
+
+  - id: T06
+    query: target the nearest player to the caster
+    expected_sources:
+      - Skills/Targeters/NearestPlayer.md
+      - Skills/Targeters/PlayersInRadius.md
+    expected_wiki: mythicmobs
+    tags: [targeter, en]
+
+  - id: T07
+    query: 选取一条直线方向上的实体 line
+    expected_sources:
+      - Skills/Targeters/LivingInLine.md
+      - Skills/Targeters/Line.md
+    expected_wiki: mythicmobs
+    tags: [targeter, line, zh]
+
+  - id: T08
+    query: cone targeter in front of caster
+    expected_sources:
+      - Skills/Targeters/Cone.md
+      - Skills/Targeters/LivingInCone.md
+    expected_wiki: mythicmobs
+    tags: [targeter, cone, en]
+
+  - id: T09
+    query: 选取仇恨表里随机一个目标
+    expected_sources:
+      - Skills/Targeters/RandomThreatTarget.md
+      - Skills/Targeters/ThreatTable.md
+      - Skills/Targeters/ThreatTablePlayers.md
+    expected_wiki: mythicmobs
+    tags: [targeter, threat, zh]
+
+  - id: T10
+    query: target by player name string
+    expected_sources:
+      - Skills/Targeters/PlayerByName.md
+      - Skills/Targeters/PlayerLocationByName.md
+    expected_wiki: mythicmobs
+    tags: [targeter, en]
+
+  - id: T11
+    query: 随机选取施法者附近的若干位置
+    expected_sources:
+      - Skills/Targeters/RandomLocationsNearCaster.md
+      - Skills/Targeters/RandomLocationsNearOrigin.md
+      - Skills/Targeters/RandomRingPoint.md
+    expected_wiki: mythicmobs
+    tags: [targeter, random, zh]
+
+  - id: T12
+    query: target the parent or owner of this mob
+    expected_sources:
+      - Skills/Targeters/Parent.md
+      - Skills/Targeters/Owner.md
+      - Skills/Targeters/Father.md
+      - Skills/Targeters/Mother.md
+    expected_wiki: mythicmobs
+    tags: [targeter, parent, en]
+
+  - id: T13
+    query: 选取一个矩形或球形范围内的目标
+    expected_sources:
+      - Skills/Targeters/Rectangle.md
+      - Skills/Targeters/Sphere.md
+      - Skills/Targeters/Region.md
+    expected_wiki: mythicmobs
+    tags: [targeter, shape, zh]
+
+  - id: T14
+    query: targeter from a stored variable location
+    expected_sources: ["Skills/Targeters/VariableLocation.md"]
+    expected_wiki: mythicmobs
+    tags: [targeter, variable, en]
+
+  - id: T15
+    query: target the entity the player is currently mounted on
+    expected_sources:
+      - Skills/Targeters/Mount.md
+      - Skills/Targeters/Vehicle.md
+      - Skills/Targeters/Passenger.md
+    expected_wiki: mythicmobs
+    tags: [targeter, mount, en]
+
+  # ============================================================
+  # 条件 (Conditions) — C01-C15
+  # ============================================================
   - id: C01
     query: condition check distance to target less than 10
     expected_sources: ["Skills/Conditions/distance.md"]
@@ -111,17 +393,121 @@ cases:
 
   - id: C02
     query: 检查目标当前血量百分比
-    expected_sources: ["Skills/Conditions/health.md"]
+    expected_sources: ["Skills/Conditions/health.md", "Skills/Conditions/HealthPercent.md"]
     expected_wiki: mythicmobs
     tags: [condition, zh]
 
   - id: C03
     query: condition check player is holding a specific item id
-    expected_sources: ["Skills/Conditions/hasItem.md"]
+    expected_sources: ["Skills/Conditions/hasItem.md", "Skills/Conditions/holding.md"]
     expected_wiki: mythicmobs
     tags: [condition, en]
 
-  # ---------- 触发器 (Triggers) ----------
+  - id: C04
+    query: 检查是否下雨 天气条件
+    expected_sources:
+      - Skills/Conditions/raining.md
+      - Skills/Conditions/thundering.md
+      - Skills/Conditions/sunny.md
+    expected_wiki: mythicmobs
+    tags: [condition, weather, zh]
+
+  - id: C05
+    query: chance probability roll for skill execution
+    expected_sources: ["Skills/Conditions/chance.md"]
+    expected_wiki: mythicmobs
+    tags: [condition, chance, en]
+
+  - id: C06
+    query: 判断是否在夜晚 时间条件
+    expected_sources:
+      - Skills/Conditions/night.md
+      - Skills/Conditions/day.md
+      - Skills/Conditions/worldtime.md
+    expected_wiki: mythicmobs
+    tags: [condition, time, zh]
+
+  - id: C07
+    query: check if target is a player or living entity
+    expected_sources:
+      - Skills/Conditions/isplayer.md
+      - Skills/Conditions/isliving.md
+      - Skills/Conditions/EntityType.md
+    expected_wiki: mythicmobs
+    tags: [condition, type, en]
+
+  - id: C08
+    query: 检查是否有特定 tag 标签
+    expected_sources: ["Skills/Conditions/hastag.md"]
+    expected_wiki: mythicmobs
+    tags: [condition, tag, zh]
+
+  - id: C09
+    query: target inside or outside specific region
+    expected_sources:
+      - Skills/Conditions/region.md
+      - Skills/Conditions/inside.md
+      - Skills/Conditions/outside.md
+      - Skills/Conditions/notinregion.md
+    expected_wiki: mythicmobs
+    tags: [condition, region, en]
+
+  - id: C10
+    query: 检查变量值是否等于某个数字
+    expected_sources:
+      - Skills/Conditions/variableequals.md
+      - Skills/Conditions/variableinrange.md
+      - Skills/Conditions/variableisset.md
+    expected_wiki: mythicmobs
+    tags: [condition, variable, zh]
+
+  - id: C11
+    query: line of sight check between caster and target
+    expected_sources:
+      - Skills/Conditions/lineofsight.md
+      - Skills/Conditions/lineofsightfromorigin.md
+      - Skills/Conditions/LookingAt.md
+    expected_wiki: mythicmobs
+    tags: [condition, los, en]
+
+  - id: C12
+    query: 检查目标是否被点燃 burning 状态
+    expected_sources:
+      - Skills/Conditions/burning.md
+      - Skills/Conditions/haspotioneffect.md
+    expected_wiki: mythicmobs
+    tags: [condition, burning, zh]
+
+  - id: C13
+    query: condition check number of mobs within range
+    expected_sources:
+      - Skills/Conditions/mobsinradius.md
+      - Skills/Conditions/MobsNearOrigin.md
+      - Skills/Conditions/LivingInRadius.md
+    expected_wiki: mythicmobs
+    tags: [condition, mobsnear, en]
+
+  - id: C14
+    query: 检查玩家在线人数或半径内玩家数量
+    expected_sources:
+      - Skills/Conditions/playersinradius.md
+      - Skills/Conditions/playerwithin.md
+      - Skills/Conditions/playersonline.md
+    expected_wiki: mythicmobs
+    tags: [condition, players, zh]
+
+  - id: C15
+    query: check entity has aura buff stacks
+    expected_sources:
+      - Skills/Conditions/hasaura.md
+      - Skills/Conditions/hasaurastacks.md
+      - Skills/Conditions/HasAuraType.md
+    expected_wiki: mythicmobs
+    tags: [condition, aura, en]
+
+  # ============================================================
+  # 触发器 (Triggers) — TR01-TR10
+  # ============================================================
   - id: TR01
     query: trigger when mob takes damage
     expected_sources: ["Skills/Triggers/onDamaged.md"]
@@ -134,7 +520,67 @@ cases:
     expected_wiki: mythicmobs
     tags: [trigger, zh]
 
-  # ---------- Mob 配置层 ----------
+  - id: TR03
+    query: trigger when mob spawns or loads
+    expected_sources:
+      - Skills/Triggers/onSpawn.md
+      - Skills/Triggers/onSpawnOrLoad.md
+      - Skills/Triggers/onReady.md
+      - Skills/Triggers/onLoad.md
+    expected_wiki: mythicmobs
+    tags: [trigger, spawn, en]
+
+  - id: TR04
+    query: 死亡时触发的技能 onDeath
+    expected_sources: ["Skills/Triggers/onDeath.md", "Skills/Triggers/onPlayerKill.md"]
+    expected_wiki: mythicmobs
+    tags: [trigger, death, zh]
+
+  - id: TR05
+    query: timer trigger that runs every N ticks
+    expected_sources: ["Skills/Triggers/onTimer.md"]
+    expected_wiki: mythicmobs
+    tags: [trigger, timer, en]
+
+  - id: TR06
+    query: 投掷物命中目标的触发器
+    expected_sources:
+      - Skills/Triggers/onProjectileHit.md
+      - Skills/Triggers/onProjectileLand.md
+      - Skills/Triggers/onBowHit.md
+    expected_wiki: mythicmobs
+    tags: [trigger, projectile, zh]
+
+  - id: TR07
+    query: trigger when mob enters or drops combat
+    expected_sources:
+      - Skills/Triggers/onCombat.md
+      - Skills/Triggers/onEnterCombat.md
+      - Skills/Triggers/onDropCombat.md
+    expected_wiki: mythicmobs
+    tags: [trigger, combat, en]
+
+  - id: TR08
+    query: 玩家右键交互触发
+    expected_sources: ["Skills/Triggers/onInteract.md"]
+    expected_wiki: mythicmobs
+    tags: [trigger, interact, zh]
+
+  - id: TR09
+    query: signal based trigger custom event
+    expected_sources: ["Skills/Triggers/onSignal.md", "Skills/Mechanics/signal.md"]
+    expected_wiki: mythicmobs
+    tags: [trigger, signal, en]
+
+  - id: TR10
+    query: 监听聊天消息触发技能
+    expected_sources: ["Skills/Mechanics/OnChat.md", "Skills/Triggers/onHear.md"]
+    expected_wiki: mythicmobs
+    tags: [trigger, chat, zh]
+
+  # ============================================================
+  # Mob 配置层 — B01-B11
+  # ============================================================
   - id: B01
     query: how to define custom AI goal selectors and target selectors
     expected_sources:
@@ -163,12 +609,56 @@ cases:
     expected_wiki: mythicmobs
     tags: [mob, power, en]
 
-  # ---------- Item / Crucible ----------
+  - id: B05
+    query: 配置 mob 的伤害免疫和减伤类型
+    expected_sources: ["Mobs/DamageModifiers.md", "Mobs/ImmunityTables.md"]
+    expected_wiki: mythicmobs
+    tags: [mob, immunity, zh]
+
+  - id: B06
+    query: kill message custom death broadcast
+    expected_sources: ["Mobs/KillMessages.md"]
+    expected_wiki: mythicmobs
+    tags: [mob, killmessage, en]
+
+  - id: B07
+    query: 用模板继承机制复用 mob 配置
+    expected_sources: ["Mobs/Templates.md"]
+    expected_wiki: mythicmobs
+    tags: [mob, template, zh]
+
+  - id: B08
+    query: mob level system experience scaling
+    expected_sources: ["Mobs/Levels.md", "Mobs/LevelModifiers"]
+    expected_wiki: mythicmobs
+    tags: [mob, level, en]
+
+  - id: B09
+    query: 怪物头顶名字显示和发光选项
+    expected_sources: ["Mobs/Options.md", "Mobs/DisplayOptions.md"]
+    expected_wiki: mythicmobs
+    tags: [mob, display, zh]
+
+  - id: B10
+    query: threat table priority weight system
+    expected_sources: ["Mobs/ThreatTables.md"]
+    expected_wiki: mythicmobs
+    tags: [mob, threat, en]
+
+  - id: B11
+    query: 所有可用的原版实体类型 Type 列表
+    expected_sources: ["Mobs/Types.md"]
+    expected_wiki: mythicmobs
+    tags: [mob, types, zh]
+
+  # ============================================================
+  # Item / Crucible — I01-I22
+  # ============================================================
   - id: I01
     query: 创建一个右键使用消耗的物品技能
     expected_sources:
-      - wiki/mythiccrucible.wiki/Skills/Triggers/onUse.md
       - mythiccrucible.wiki/Skills/Triggers/onUse.md
+      - Skills/Triggers/onUse.md
     expected_wiki: crucible
     tags: [item, crucible, trigger, zh]
 
@@ -177,6 +667,7 @@ cases:
     expected_sources:
       - mythiccrucible.wiki/Recipes
       - mythiccrucible.wiki/Recipes.md
+      - Recipes/Shaped.md
     expected_wiki: crucible
     tags: [item, recipe, en]
 
@@ -185,7 +676,7 @@ cases:
     expected_sources:
       - mythiccrucible.wiki/Furniture
       - mythiccrucible.wiki/Furniture.md
-      - mythiccrucible.wiki/Skills/Triggers/onBlockSit.md
+      - Skills/Triggers/onBlockSit.md
     expected_wiki: crucible
     tags: [item, furniture, en]
 
@@ -211,7 +702,213 @@ cases:
     expected_wiki: crucible
     tags: [item, crucible, en]
 
-  # ---------- 综合 / metaskill ----------
+  - id: I07
+    query: 给物品添加附魔 sharpness 锋利
+    expected_sources: ["Items/Enchantments.md"]
+    expected_wiki: mythicmobs
+    tags: [item, enchantment, zh]
+
+  - id: I08
+    query: item options unbreakable hide flags
+    expected_sources: ["Items/Options.md"]
+    expected_wiki: mythicmobs
+    tags: [item, options, en]
+
+  - id: I09
+    query: 自定义药水颜色和效果
+    expected_sources: ["Items/Potions.md", "Skills/Mechanics/potion.md"]
+    expected_wiki: mythicmobs
+    tags: [item, potion, zh]
+
+  - id: I10
+    query: shapeless recipe crafting no pattern
+    expected_sources:
+      - mythiccrucible.wiki/Recipes/Shapeless.md
+      - mythiccrucible.wiki/Recipes.md
+    expected_wiki: crucible
+    tags: [item, recipe, en]
+
+  - id: I11
+    query: 熔炉合成 furnace recipe 烧炼配方
+    expected_sources:
+      - mythiccrucible.wiki/Recipes/Furnace.md
+      - mythiccrucible.wiki/Recipes.md
+    expected_wiki: crucible
+    tags: [item, recipe, zh]
+
+  - id: I12
+    query: brewing stand recipe custom potion
+    expected_sources:
+      - mythiccrucible.wiki/Recipes/Brewing.md
+    expected_wiki: crucible
+    tags: [item, brewing, en]
+
+  - id: I13
+    query: 锻造台 smithing 升级合成
+    expected_sources: ["mythiccrucible.wiki/Recipes/Smithing.md"]
+    expected_wiki: crucible
+    tags: [item, smithing, zh]
+
+  - id: I14
+    query: stonecutter recipe single input single output
+    expected_sources: ["mythiccrucible.wiki/Recipes/Stonecutting.md"]
+    expected_wiki: crucible
+    tags: [item, recipe, en]
+
+  - id: I15
+    query: 自定义工作台 workbench 限定特定配方
+    expected_sources: ["mythiccrucible.wiki/Recipes/Workbenches.md"]
+    expected_wiki: crucible
+    tags: [item, workbench, zh]
+
+  - id: I16
+    query: consume mechanic right click food
+    expected_sources:
+      - mythiccrucible.wiki/Skills/Triggers/onConsume.md
+      - Skills/Mechanics/consume.md
+    expected_wiki: any
+    tags: [item, consume, en]
+
+  - id: I17
+    query: 家具放置 placefurniture 在世界中
+    expected_sources:
+      - mythiccrucible.wiki/Skills/Mechanics/PlaceFurnitureAt.md
+      - mythiccrucible.wiki/Furniture.md
+    expected_wiki: crucible
+    tags: [item, furniture, zh]
+
+  - id: I18
+    query: custom durability for items wear and tear
+    expected_sources: ["mythiccrucible.wiki/CustomDurability.md"]
+    expected_wiki: crucible
+    tags: [item, durability, en]
+
+  - id: I19
+    query: 物品集合 sets 套装效果
+    expected_sources: ["mythiccrucible.wiki/Sets.md"]
+    expected_wiki: crucible
+    tags: [item, sets, zh]
+
+  - id: I20
+    query: hat item slot wear on head
+    expected_sources: ["mythiccrucible.wiki/Hats.md"]
+    expected_wiki: crucible
+    tags: [item, hat, en]
+
+  - id: I21
+    query: 动态 lore 生成 占位符
+    expected_sources:
+      - mythiccrucible.wiki/Dynamic-Lore-Generation.md
+      - mythiccrucible.wiki/Placeholders.md
+    expected_wiki: crucible
+    tags: [item, lore, zh]
+
+  - id: I22
+    query: item upgrade system mythiccrucible
+    expected_sources:
+      - mythiccrucible.wiki/Skills/Mechanics/UpgradeItem.md
+      - mythiccrucible.wiki/Skills/Conditions/ItemUpgradeLevel.md
+    expected_wiki: crucible
+    tags: [item, upgrade, en]
+
+  # ============================================================
+  # Drops 掉落 — D01-D04
+  # ============================================================
+  - id: D01
+    query: drop table custom loot configuration
+    expected_sources: ["drops/Drops.md", "drops/DropTables.md"]
+    expected_wiki: mythicmobs
+    tags: [drop, en]
+
+  - id: D02
+    query: 配置 mob 击杀掉落金币和经验
+    expected_sources: ["drops/Drops.md", "drops/DropTypes"]
+    expected_wiki: mythicmobs
+    tags: [drop, currency, zh]
+
+  - id: D03
+    query: weighted random drop probability
+    expected_sources: ["drops/Drops.md", "drops/FancyDrops.md"]
+    expected_wiki: mythicmobs
+    tags: [drop, weighted, en]
+
+  - id: D04
+    query: 用变量或公式决定掉落数量
+    expected_sources: ["drops/FancyDrops.md", "drops/DropTables.md"]
+    expected_wiki: mythicmobs
+    tags: [drop, fancy, zh]
+
+  # ============================================================
+  # Crucible 进阶机制 — CR01-CR08
+  # ============================================================
+  - id: CR01
+    query: change item custom model data dynamically
+    expected_sources:
+      - mythiccrucible.wiki/Skills/Mechanics/SetItemCustomModelData.md
+      - mythiccrucible.wiki/Skills/Mechanics/SetSlotModel.md
+    expected_wiki: crucible
+    tags: [crucible, model, en]
+
+  - id: CR02
+    query: 修改物品 NBT 数据 mechanic
+    expected_sources: ["mythiccrucible.wiki/Skills/Mechanics/SetItemNBT.md"]
+    expected_wiki: crucible
+    tags: [crucible, nbt, zh]
+
+  - id: CR03
+    query: reload ammo for ranged weapon
+    expected_sources:
+      - mythiccrucible.wiki/Skills/Mechanics/ReloadAmmo.md
+      - mythiccrucible.wiki/Skills/Mechanics/GiveAmmo.md
+      - mythiccrucible.wiki/Skills/Mechanics/ConsumeAmmo.md
+    expected_wiki: crucible
+    tags: [crucible, ammo, en]
+
+  - id: CR04
+    query: 家具点燃状态切换 furniture state
+    expected_sources:
+      - mythiccrucible.wiki/Skills/Mechanics/furniturestate.md
+      - mythiccrucible.wiki/Furniture-States.md
+      - mythiccrucible.wiki/Skills/Conditions/furnitureState.md
+    expected_wiki: crucible
+    tags: [crucible, furniture, zh]
+
+  - id: CR05
+    query: open furniture inventory click chest
+    expected_sources:
+      - mythiccrucible.wiki/Skills/Mechanics/furnitureinventory.md
+      - mythiccrucible.wiki/Skills/Mechanics/OpenBackpack.md
+    expected_wiki: crucible
+    tags: [crucible, furniture, en]
+
+  - id: CR06
+    query: 装备槽位条件检查 头盔胸甲
+    expected_sources:
+      - mythiccrucible.wiki/Skills/Conditions/EquipSlot.md
+      - mythiccrucible.wiki/Skills/Triggers/onEquip.md
+    expected_wiki: crucible
+    tags: [crucible, equip, zh]
+
+  - id: CR07
+    query: fishing custom trigger catch event
+    expected_sources:
+      - mythiccrucible.wiki/Skills/Triggers/onFish.md
+      - mythiccrucible.wiki/Skills/Triggers/onFishCatch.md
+      - mythiccrucible.wiki/Skills/Triggers/onFishBite.md
+    expected_wiki: crucible
+    tags: [crucible, fishing, en]
+
+  - id: CR08
+    query: 解析武器配置 ParseWeapon
+    expected_sources:
+      - mythiccrucible.wiki/Skills/Mechanics/ParseWeapon.md
+      - mythiccrucible.wiki/Skills/Mechanics/parsearmor.md
+    expected_wiki: crucible
+    tags: [crucible, parse, zh]
+
+  # ============================================================
+  # 综合 / metaskill / 复杂组合 — S01-S08
+  # ============================================================
   - id: S01
     query: how to write a metaskill with cooldown and condition
     expected_sources:
@@ -229,3 +926,101 @@ cases:
       - Skills/Mechanics/variableskill.md
     expected_wiki: mythicmobs
     tags: [metaskill, variables, zh]
+
+  - id: S03
+    query: design a boss with summon adds phase transitions and enrage
+    expected_sources:
+      - Skills/Mechanics/summon.md
+      - Skills/Mechanics/setvariable.md
+      - Skills/Conditions/health.md
+    expected_wiki: mythicmobs
+    tags: [composite, boss, en]
+
+  - id: S04
+    query: 让冰冻箭命中目标后产生范围冰冻光环
+    expected_sources:
+      - Skills/Mechanics/projectile.md
+      - Skills/Mechanics/freeze.md
+      - Skills/Mechanics/aura.md
+    expected_wiki: mythicmobs
+    tags: [composite, freeze, zh]
+
+  - id: S05
+    query: aoe lightning skill that strikes all players nearby with sound effect
+    expected_sources:
+      - Skills/Mechanics/lightning.md
+      - Skills/Mechanics/Sound.md
+      - Skills/Targeters/PlayersInRadius.md
+    expected_wiki: mythicmobs
+    tags: [composite, lightning, en]
+
+  - id: S06
+    query: 给玩家治疗药水 检查血量低于一半再回血
+    expected_sources:
+      - Skills/Conditions/health.md
+      - Skills/Conditions/HealthPercent.md
+      - Skills/Mechanics/heal.md
+      - Skills/Mechanics/potion.md
+    expected_wiki: mythicmobs
+    tags: [composite, heal, zh]
+
+  - id: S07
+    query: timer based aura summon adds every 30 seconds
+    expected_sources:
+      - Skills/Triggers/onTimer.md
+      - Skills/Mechanics/summon.md
+    expected_wiki: mythicmobs
+    tags: [composite, summon, en]
+
+  - id: S08
+    query: 用 onDamaged 触发反伤 反弹一定比例伤害给攻击者
+    expected_sources:
+      - Skills/Triggers/onDamaged.md
+      - Skills/Mechanics/damage.md
+      - Skills/Mechanics/percentdamage.md
+    expected_wiki: mythicmobs
+    tags: [composite, thorns, zh]
+
+  # ============================================================
+  # 边界 / 易混淆 / 命名拼写鲁棒性 — X01-X05
+  # ============================================================
+  - id: X01
+    query: setHealth maxhealth 设定怪物最大血量
+    expected_sources:
+      - Skills/Mechanics/sethealth.md
+      - Skills/Mechanics/setmaxhealth.md
+    expected_wiki: mythicmobs
+    tags: [edge, naming, zh]
+
+  - id: X02
+    query: shoot vs projectile difference between two mechanics
+    expected_sources:
+      - Skills/Mechanics/shoot.md
+      - Skills/Mechanics/projectile.md
+    expected_wiki: mythicmobs
+    tags: [edge, ambiguous, en]
+
+  - id: X03
+    query: 把目标变成另一个 mob 类型 transform
+    expected_sources:
+      - Skills/Mechanics/disguise.md
+      - Skills/Mechanics/setai.md
+      - Skills/Mechanics/setFaction.md
+    expected_wiki: mythicmobs
+    tags: [edge, transform, zh]
+
+  - id: X04
+    query: random skill from list pick one
+    expected_sources:
+      - Skills/Mechanics/randomskill.md
+      - Skills/Mechanics/Switch.md
+    expected_wiki: mythicmobs
+    tags: [edge, random, en]
+
+  - id: X05
+    query: 卡顿优化 怎么让大量粒子不掉帧 ParticleBox
+    expected_sources:
+      - Skills/Mechanics/ParticleBox.md
+      - Skills/Mechanics/Particle.md
+    expected_wiki: mythicmobs
+    tags: [edge, perf, zh]
