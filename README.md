@@ -99,7 +99,7 @@ mypy app
 
 ## 评估 (Eval)
 
-`eval/queries.yaml` 里有 30 条人工标注题目，覆盖 mob / item / metaskill / mechanic /
+`eval/queries.yaml` 里有 133 条人工标注题目，覆盖 mob / item / metaskill / mechanic /
 targeter / condition / trigger 7 类，中英混合。`eval/run_eval.py` 跑出 `Recall@K (K=1,3,5,8)` + `MRR`，
 并把 per-query 命中明细写到 `eval/results/{timestamp}_{label}.json`。
 
@@ -116,15 +116,15 @@ docker compose exec fastapi python -m eval.run_eval --toggle-rerank
 docker compose exec fastapi python -m eval.run_eval --rerank on --top-k 8
 ```
 
-评估结果（embedding使用BAAI/bge-small-zh-v1.5，reranker使用BAAI/bge-reranker-base，使用cpu计算，N=30）：
+评估结果（N=133）：
 
-| metric   | rerank_off | rerank_on | Delta (rerank_on - rerank_off) |
-| -------- | ---------- | --------- | ------------------------------ |
-| recall@1 | 0.200      | 0.367     | +16.7pp                        |
-| recall@3 | 0.433      | 0.533     | +10.0pp                        |
-| recall@5 | 0.567      | 0.633     | +6.7pp                         |
-| recall@8 | 0.633      | 0.667     | +3.3pp                         |
-| mrr      | 0.341      | 0.472     | +13.1pp                        |
+| metric   | rerank_off | rerank_on (bge-reranker-v2-m3) | Delta   |
+| -------- | ---------- | ----------------------------- | ------- |
+| recall@1 | 0.211      | 0.376                         | +16.5pp |
+| recall@3 | 0.421      | 0.586                         | +16.5pp |
+| recall@5 | 0.556      | 0.669                         | +11.3pp |
+| recall@8 | 0.654      | 0.707                         | +5.3pp  |
+| mrr      | 0.352      | 0.493                         | +0.141  |
 
 
 新增评估题目时，每条 case 至少给 1 条 `expected_sources`（substring 匹配，容忍路径前缀差异），
