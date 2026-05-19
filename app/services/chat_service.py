@@ -64,10 +64,10 @@ async def chat_stream(message: str, session_id: str | None = None) -> AsyncItera
     history: list[dict[str, str]] = []
     last_yaml = ""
     if session_id:
-        snap = memory.snapshot(session_id, max_turns=3)
+        snap = await memory.snapshot(session_id, max_turns=3)
         history = list(snap.get("history") or [])  # type: ignore[arg-type]
         last_yaml = str(snap.get("last_yaml") or "")
-        memory.append_message(session_id, "user", message)
+        await memory.append_message(session_id, "user", message)
 
     final_yaml = ""
     final_explanation = ""
@@ -157,11 +157,11 @@ async def chat_stream(message: str, session_id: str | None = None) -> AsyncItera
     # 把 assistant 的产物写回 history，让下一轮能看到
     if session_id:
         if final_yaml:
-            memory.set_last_yaml(session_id, final_yaml)
+            await memory.set_last_yaml(session_id, final_yaml)
         # 写一条 assistant 消息：优先存 explanation；YAML 单独走 last_yaml，不重复塞 history。
         if final_explanation or final_yaml:
             assistant_text = final_explanation or "(已生成 YAML)"
-            memory.append_message(session_id, "assistant", assistant_text)
+            await memory.append_message(session_id, "assistant", assistant_text)
     yield _encode(ChatChunk(type="done", content="finished"))
 
 
@@ -173,19 +173,19 @@ async def chat_once(message: str, session_id: str | None = None) -> dict[str, An
     history: list[dict[str, str]] = []
     last_yaml = ""
     if session_id:
-        snap = memory.snapshot(session_id, max_turns=3)
+        snap = await memory.snapshot(session_id, max_turns=3)
         history = list(snap.get("history") or [])  # type: ignore[arg-type]
         last_yaml = str(snap.get("last_yaml") or "")
-        memory.append_message(session_id, "user", message)
+        await memory.append_message(session_id, "user", message)
 
     result = await run_agent(message, history=history, last_yaml=last_yaml)
 
     if session_id:
         if result.get("yaml_text"):
-            memory.set_last_yaml(session_id, result["yaml_text"])
+            await memory.set_last_yaml(session_id, result["yaml_text"])
         reply = result.get("explanation") or result.get("final_message") or ""
         if reply or result.get("yaml_text"):
-            memory.append_message(session_id, "assistant", reply or "(已生成 YAML)")
+            await memory.append_message(session_id, "assistant", reply or "(已生成 YAML)")
     return {
         "reply": result.get("explanation") or result.get("final_message") or "",
         "yaml": result.get("yaml_text") or None,

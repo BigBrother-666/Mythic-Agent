@@ -58,6 +58,11 @@ class Settings(BaseSettings):
     rag_top_k: int = Field(default=8)
     session_ttl_seconds: int = Field(default=3600)
 
+    # ---------- Memory 持久化 ----------
+    # memory_backend ∈ {"memory","redis"}；redis 用同一个 REDIS_URL 共享连接
+    memory_backend: str = Field(default="memory")
+    memory_redis_prefix: str = Field(default="mma:sess:")
+
     @property
     def milvus_uri(self) -> str:
         """Milvus 连接 URI；MilvusClient 接收的格式。"""

@@ -119,12 +119,12 @@ docker compose exec fastapi python -m eval.run_eval --rerank on --top-k 8
 评估结果（N=133）：
 
 | metric   | rerank_off | rerank_on (bge-reranker-v2-m3) | Delta   |
-| -------- | ---------- | ----------------------------- | ------- |
-| recall@1 | 0.211      | 0.376                         | +16.5pp |
-| recall@3 | 0.421      | 0.586                         | +16.5pp |
-| recall@5 | 0.556      | 0.669                         | +11.3pp |
-| recall@8 | 0.654      | 0.707                         | +5.3pp  |
-| mrr      | 0.352      | 0.493                         | +0.141  |
+| -------- | ---------- | ------------------------------ | ------- |
+| recall@1 | 0.211      | 0.376                          | +16.5pp |
+| recall@3 | 0.421      | 0.586                          | +16.5pp |
+| recall@5 | 0.556      | 0.669                          | +11.3pp |
+| recall@8 | 0.654      | 0.707                          | +5.3pp  |
+| mrr      | 0.352      | 0.493                          | +0.141  |
 
 
 新增评估题目时，每条 case 至少给 1 条 `expected_sources`（substring 匹配，容忍路径前缀差异），
@@ -221,3 +221,5 @@ curl -X POST http://localhost:8000/api/validate \
 | RERANK_DEVICE         | cpu                       | `cuda` 显著加速                                                   |
 | RERANK_POOL_FACTOR    | 4                         | 送入 rerank 的候选数 = top_k × 此值；越大越准但越慢               |
 | RATE_LIMIT_PER_MINUTE | 30                        | per-IP 限流                                                       |
+| MEMORY_BACKEND        | redis                     | 短期记忆存放位置，可填写memory或redis                             |
+| MEMORY_REDIS_PREFIX   | mma:sess:                 | Redis key 的前缀                                                  |

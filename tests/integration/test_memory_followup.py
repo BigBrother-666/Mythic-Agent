@@ -1,11 +1,4 @@
-"""Memory + 多轮对话集成测试。
-
-锁住关键契约：
-- 第一轮的 YAML 与 explanation 都进入 memory（last_yaml + history）。
-- 第二轮 chat_service 从 memory 读快照，注入到 graph state；
-  graph 把它们渲染进 planner / generator 的 prompt。
-- 第二轮 user message 在 stream 调用之后再写入 memory，避免重复。
-"""
+"""Memory + 多轮对话集成测试。"""
 from __future__ import annotations
 
 import json
@@ -16,7 +9,7 @@ import pytest
 
 from app.agent import graph as graph_module
 from app.agent import memory as memory_module
-from app.agent.memory import MemoryStore
+from app.agent.memory import InMemoryBackend, MemoryStore
 from app.services import chat_service
 
 
@@ -60,8 +53,8 @@ async def _fake_search(q, top_k=4, category=None, wiki=None):  # type: ignore[no
 
 
 def _fresh_memory(monkeypatch) -> MemoryStore:
-    """每个测试拿到全新的 MemoryStore，避免不同测试相互污染。"""
-    store = MemoryStore()
+    """每个测试拿到全新的 MemoryStore（强制 InMemoryBackend），避免不同测试相互污染。"""
+    store = MemoryStore(backend=InMemoryBackend())
     monkeypatch.setattr(memory_module, "_store", store)
     return store
 
@@ -104,7 +97,7 @@ async def test_first_turn_writes_memory_and_does_not_use_history(monkeypatch) ->
     assert "上一次生成的 YAML" not in planner_user
 
     # memory 内已写入 user + assistant + last_yaml
-    s1 = mem.get("s1")
+    s1 = await mem.get("s1")
     assert s1.last_yaml is not None and "FrostNova" in s1.last_yaml
     roles = [m["role"] for m in s1.history]
     assert roles == ["user", "assistant"]
@@ -116,9 +109,9 @@ async def test_second_turn_injects_history_and_last_yaml_into_prompt(monkeypatch
     """第二轮：planner 与 generator 的 prompt 必须看到上一轮的 YAML 与回复。"""
     mem = _fresh_memory(monkeypatch)
     # 预填 memory，模拟第一轮已经发生过
-    mem.append_message("s1", "user", "写一个范围冻结技能")
-    mem.append_message("s1", "assistant", "Cooldown 防止过度施放")
-    mem.set_last_yaml(
+    await mem.append_message("s1", "user", "写一个范围冻结技能")
+    await mem.append_message("s1", "assistant", "Cooldown 防止过度施放")
+    await mem.set_last_yaml(
         "s1",
         "FrostNova:\n  Cooldown: 8\n  Skills:\n  - freeze{ticks=60} @EIR{r=5}\n",
     )
@@ -161,7 +154,7 @@ async def test_second_turn_injects_history_and_last_yaml_into_prompt(monkeypatch
     assert "FrostNova:\n  Cooldown: 8" in generator_user
 
     # 关键断言 3：本轮 user 消息也写进了 history（在调用 stream_events 之后）
-    s1 = mem.get("s1")
+    s1 = await mem.get("s1")
     user_msgs = [m for m in s1.history if m["role"] == "user"]
     assert any("再加一点伤害" in m["content"] for m in user_msgs)
 
@@ -173,9 +166,9 @@ async def test_second_turn_injects_history_and_last_yaml_into_prompt(monkeypatch
 async def test_history_does_not_contain_current_user_message_during_planner(monkeypatch) -> None:  # type: ignore[no-untyped-def]
     """关键边界：第二轮的 planner prompt 中，history 只能含历史消息，不能把本轮 user 也算进去。"""
     mem = _fresh_memory(monkeypatch)
-    mem.append_message("s1", "user", "第一条问题")
-    mem.append_message("s1", "assistant", "第一条回复")
-    mem.set_last_yaml("s1", "Foo:\n  Type: ZOMBIE\n")
+    await mem.append_message("s1", "user", "第一条问题")
+    await mem.append_message("s1", "assistant", "第一条回复")
+    await mem.set_last_yaml("s1", "Foo:\n  Type: ZOMBIE\n")
 
     stub = _RecordingLLM(
         responses=[
@@ -213,4 +206,4 @@ async def test_no_session_id_does_not_touch_memory(monkeypatch) -> None:  # type
         async for _ in chat_service.chat_stream("hi", session_id=None):
             pass
 
-    assert mem._sessions == {}  # 完全不写
+    assert await mem.backend.size() == 0  # 完全不写
