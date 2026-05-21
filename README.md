@@ -120,11 +120,11 @@ docker compose exec fastapi python -m eval.run_eval --rerank on --top-k 8
 
 | metric   | rerank_off | rerank_on (bge-reranker-v2-m3) | Delta   |
 | -------- | ---------- | ------------------------------ | ------- |
-| recall@1 | 0.211      | 0.376                          | +16.5pp |
-| recall@3 | 0.421      | 0.586                          | +16.5pp |
-| recall@5 | 0.556      | 0.669                          | +11.3pp |
-| recall@8 | 0.654      | 0.707                          | +5.3pp  |
-| mrr      | 0.352      | 0.493                          | +0.141  |
+| recall@1 | 0.241      | 0.383                          | +14.3pp |
+| recall@3 | 0.474      | 0.617                          | +14.3pp |
+| recall@5 | 0.579      | 0.669                          | +9.0pp  |
+| recall@8 | 0.662      | 0.722                          | +6.0pp  |
+| mrr      | 0.376      | 0.505                          | +12.9pp |
 
 
 新增评估题目时，每条 case 至少给 1 条 `expected_sources`（substring 匹配，容忍路径前缀差异），

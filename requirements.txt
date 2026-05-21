@@ -21,6 +21,7 @@ langgraph==0.2.50
 # ------- Vector & Search -------
 pymilvus==2.5.0
 rank-bm25==0.2.2
+jieba==0.42.1
 # pymilvus 2.5 仍 import pkg_resources；setuptools 81+ 已移除 pkg_resources，故锁到 80.x
 setuptools>=75.0.0,<81.0.0
 

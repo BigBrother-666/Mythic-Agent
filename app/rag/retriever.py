@@ -2,14 +2,65 @@
 from __future__ import annotations
 
 import asyncio
+import re
 from dataclasses import dataclass
+from pathlib import Path
 
+import jieba
 from rank_bm25 import BM25Okapi
 
 from app.core.config import get_settings
 from app.core.logging import logger
 from app.rag.embeddings import get_embedding_service
 from app.rag.vector_store import VectorHit, get_milvus_store
+
+# jieba 静默模式，避免启动时输出日志到 stderr
+jieba.setLogLevel(jieba.logging.INFO)
+
+_STOPWORDS_DIR = Path(__file__).parent / "stopwords"
+
+
+def _load_stopwords() -> frozenset[str]:
+    """从 stopwords/ 目录加载所有 txt 文件。"""
+    words: set[str] = set()
+    for f in _STOPWORDS_DIR.glob("*.txt"):
+        for line in f.read_text(encoding="utf-8").splitlines():
+            w = line.strip()
+            if w:
+                words.add(w)
+    return frozenset(words)
+
+
+_STOPWORDS = _load_stopwords()
+
+_MYTHIC_PATTERN = re.compile(r"[a-zA-Z][a-zA-Z0-9_]*")
+
+
+def _tokenize(text: str) -> list[str]:
+    """中英文混合分词：中文用 jieba 切词，英文按字母数字边界切。
+
+    针对 MythicMobs 领域优化：
+    - 保留 camelCase / snake_case 标识符完整（如 projectile、onDamaged、EIR）
+    - 中文用 jieba 词级分词而非逐字，提升 BM25 区分度
+    - 使用 hit/baidu/scu/cn 四份停用词表过滤噪音
+    """
+    text = text.lower()
+    out: list[str] = []
+
+    # 先提取英文/数字 token（含下划线，保留 MythicMobs 标识符完整性）
+    en_tokens = _MYTHIC_PATTERN.findall(text)
+    for tok in en_tokens:
+        if tok not in _STOPWORDS and len(tok) > 1:
+            out.append(tok)
+
+    # 提取中文片段并用 jieba 分词
+    zh_segments = re.findall(r"[\u4e00-\u9fff]+", text)
+    for seg in zh_segments:
+        for word in jieba.cut(seg):
+            if word not in _STOPWORDS and len(word) > 1:
+                out.append(word)
+
+    return out
 
 
 @dataclass
@@ -23,24 +74,6 @@ class FusedHit:
     category: str
     tags: list[str]
     wiki: str = "mythicmobs"
-
-
-def _tokenize(text: str) -> list[str]:
-    """简单的中英文混合分词：英文按 alnum 切，中文逐字。"""
-    out: list[str] = []
-    buf: list[str] = []
-    for ch in text.lower():
-        if ch.isalnum() and ord(ch) < 128:
-            buf.append(ch)
-        else:
-            if buf:
-                out.append("".join(buf))
-                buf = []
-            if ch.strip() and ord(ch) >= 0x4E00:
-                out.append(ch)
-    if buf:
-        out.append("".join(buf))
-    return out
 
 
 class HybridRetriever:
