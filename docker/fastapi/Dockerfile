@@ -18,9 +18,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY requirements.txt .
 
-# pymilvus 2.5 仍 import pkg_resources；显式装 setuptools<81（81+ 已移除 pkg_resources）
 RUN pip install --upgrade pip && \
-    pip install "setuptools>=75,<81" && \
     pip install --extra-index-url ${TORCH_INDEX_URL} -r requirements.txt
 
 # ============== Stage 2: runtime ==============
