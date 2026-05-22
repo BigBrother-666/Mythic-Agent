@@ -8,7 +8,6 @@ import importlib
 from typing import Any
 
 from app.agent.tools.config_formatter import config_formatter_tool, format_yaml
-from app.agent.tools.version_compat import version_compat_tool
 from app.agent.tools.yaml_validator import validate_yaml, yaml_validator_tool
 
 _LAZY_ATTRS = {
@@ -30,7 +29,6 @@ def __getattr__(name: str) -> Any:
             yaml_validator_tool,
             __getattr__("example_retriever"),
             config_formatter_tool,
-            version_compat_tool,
         ]
     raise AttributeError(name)
 
@@ -44,5 +42,4 @@ __all__ = [
     "example_retriever",
     "config_formatter_tool",
     "format_yaml",
-    "version_compat_tool",
 ]

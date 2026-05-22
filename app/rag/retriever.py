@@ -184,7 +184,22 @@ class HybridRetriever:
 
         # 取候选池
         ranked_keys = sorted(scores.keys(), key=lambda k: scores[k], reverse=True)
-        pool_keys = ranked_keys[:candidate_size]
+
+        # Source 级去重：同一 source 最多保留 max_per_source 条，避免大文档霸占结果
+        max_per_source = settings.rag_max_per_source
+        source_count: dict[str, int] = {}
+        pool_keys: list[str] = []
+        for k in ranked_keys:
+            src = keep[k].source
+            if "changelog" in src.lower():
+                continue
+            cnt = source_count.get(src, 0)
+            if cnt >= max_per_source:
+                continue
+            source_count[src] = cnt + 1
+            pool_keys.append(k)
+            if len(pool_keys) >= candidate_size:
+                break
 
         fused = [
             FusedHit(

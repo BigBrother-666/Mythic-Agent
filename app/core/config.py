@@ -57,6 +57,7 @@ class Settings(BaseSettings):
     rate_limit_per_minute: int = Field(default=30)
     enable_rerank: bool = Field(default=False)
     rag_top_k: int = Field(default=8)
+    rag_max_per_source: int = Field(default=2)
     session_ttl_seconds: int = Field(default=3600)
 
     # ---------- Memory 持久化 ----------
