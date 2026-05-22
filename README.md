@@ -11,9 +11,9 @@ FastAPI (uvloop, async)
     ↓
 LangGraph Agent: planner → retriever → generator → validator → (fix loop)
     ↓ astream(stream_mode=["updates","messages"])  ← 节点更新 + LLM token 双轨
-Tools: wiki_search、yaml_validator、example_retriever、config_formatter、version_compat
+Tools: wiki_search、yaml_validator、example_retriever、config_formatter
     ↓
-RAG: chunker → bge embedding → Milvus + BM25 (RRF 融合)
+RAG: chunker → bge embedding → Milvus + BM25 (RRF 融合) → [可选 HyDE / Rerank]
 ```
 
 ## 本地部署
@@ -76,6 +76,10 @@ git clone https://git.lumine.io/mythiccraft/mythiccrucible.wiki.git
 
 # 启动 milvus + redis（推荐用 docker-compose 起依赖）
 docker compose up -d milvus redis etcd minio
+# 如果使用了 langfuse
+docker compose --profile langfuse up -d etcd minio milvus redis langfuse langfuse-db
+# 单独启动 langfuse
+docker compose --profile langfuse up -d
 
 cp .env.example .env
 sed -i 's/MILVUS_HOST=milvus/MILVUS_HOST=localhost/' .env
@@ -118,13 +122,39 @@ docker compose exec fastapi python -m eval.run_eval --rerank on --top-k 8
 
 评估结果（N=133）：
 
-| metric   | rerank_off | rerank_on (bge-reranker-v2-m3) | Delta   |
-| -------- | ---------- | ------------------------------ | ------- |
-| recall@1 | 0.241      | 0.383                          | +14.3pp |
-| recall@3 | 0.474      | 0.617                          | +14.3pp |
-| recall@5 | 0.579      | 0.669                          | +9.0pp  |
-| recall@8 | 0.662      | 0.722                          | +6.0pp  |
-| mrr      | 0.376      | 0.505                          | +12.9pp |
+Embed Model: BAAI/bge-small-zh-v1.5
+Rerank Model: BAAI/bge-reranker-v2-m3
+
+| metric   | rerank_off | rerank_on | Delta   |
+| -------- | ---------- | --------- | ------- |
+| recall@1 | 0.241      | 0.383     | +14.3pp |
+| recall@3 | 0.474      | 0.617     | +14.3pp |
+| recall@5 | 0.579      | 0.669     | +9.0pp  |
+| recall@8 | 0.662      | 0.722     | +6.0pp  |
+| mrr      | 0.376      | 0.505     | +12.9pp |
+
+---
+
+Embed Model: Qwen/Qwen3-Embedding-0.6B
+Rerank Model: Qwen/Qwen3-Reranker-0.6B
+
+| metric   | rerank_off | rerank_on | Delta  |
+| -------- | ---------- | --------- | ------ |
+| recall@1 | 0.391      | 0.444     | +5.3pp |
+| recall@3 | 0.654      | 0.699     | +4.5pp |
+| recall@5 | 0.767      | 0.797     | +3.0pp |
+| recall@8 | 0.872      | 0.880     | +0.8pp |
+| mrr      | 0.542      | 0.588     | +4.5pp |
+
+开启HyDE: 
+
+| metric   | rerank_off | rerank_on | Delta  |
+| -------- | ---------- | --------- | ------ |
+| recall@1 | 0.459      | 0.474     | +1.5pp |
+| recall@3 | 0.684      | 0.699     | +1.5pp |
+| recall@5 | 0.805      | 0.805     | +0.0pp |
+| recall@8 | 0.887      | 0.872     | -1.5pp |
+| mrr      | 0.600      | 0.605     | +0.6pp |
 
 
 新增评估题目时，每条 case 至少给 1 条 `expected_sources`（substring 匹配，容忍路径前缀差异），
@@ -210,16 +240,37 @@ curl -X POST http://localhost:8000/api/validate \
 | OPENAI_API_KEY        | (必填)                    | LLM API key                                                       |
 | OPENAI_BASE_URL       | https://api.openai.com/v1 | OpenAI Chat API 兼容端点                                          |
 | LLM_MODEL             | gpt-4o-mini               | 模型名                                                            |
+| LLM_TEMPERATURE       | 0.2                       | LLM 采样温度；越低越确定性                                        |
+| LLM_MAX_TOKENS        | 2048                      | LLM 单次生成最大 token 数                                         |
 | EMBED_MODEL           | BAAI/bge-small-zh-v1.5    | 默认轻量；可换 `BAAI/bge-m3` (1024 维)                            |
 | EMBED_DIM             | 512                       | 与 EMBED_MODEL 必须匹配，bge-m3 → 1024                            |
 | EMBED_DEVICE          | cpu                       | `cuda` 可显著加速入库                                             |
-| MILVUS_HOST           | milvus                    | docker 内服务名                                                   |
-| WIKI_ROOT             | /wiki                     | wiki 父目录（容器内）；下含 MythicMobs.wiki / mythiccrucible.wiki |
-| RAG_TOP_K             | 8                         | 单次检索返回 chunk 数                                             |
+| EMBED_BATCH_SIZE      | 16                        | Embedding 推理批量大小                                            |
 | ENABLE_RERANK         | false                     | 启用 cross-encoder 二阶段重排序                                   |
 | RERANK_MODEL          | BAAI/bge-reranker-base    | rerank 模型；多语言可换 `BAAI/bge-reranker-v2-m3`                 |
 | RERANK_DEVICE         | cpu                       | `cuda` 显著加速                                                   |
 | RERANK_POOL_FACTOR    | 4                         | 送入 rerank 的候选数 = top_k × 此值；越大越准但越慢               |
+| RERANK_MAX_LENGTH     | 512                       | Rerank 模型最大输入 token 长度                                    |
+| RERANK_BATCH_SIZE     | 16                        | Rerank 推理批量大小                                               |
+| MILVUS_HOST           | milvus                    | docker 内服务名                                                   |
+| MILVUS_PORT           | 19530                     | Milvus gRPC 端口                                                  |
+| MILVUS_COLLECTION     | mythicmobs_docs           | Milvus collection 名称                                            |
+| REDIS_URL             | redis://redis:6379/0      | Redis 连接 URL                                                    |
+| APP_HOST              | 0.0.0.0                   | FastAPI 监听地址                                                  |
+| APP_PORT              | 8000                      | FastAPI 监听端口                                                  |
+| APP_LOG_LEVEL         | INFO                      | 日志级别（DEBUG / INFO / WARNING / ERROR）                        |
+| WIKI_ROOT             | /wiki                     | wiki 父目录（容器内）；下含 MythicMobs.wiki / mythiccrucible.wiki |
+| MAX_PROMPT_CHARS      | 8000                      | 送入 LLM 的 RAG 上下文最大字符数                                  |
 | RATE_LIMIT_PER_MINUTE | 30                        | per-IP 限流                                                       |
-| MEMORY_BACKEND        | redis                     | 短期记忆存放位置，可填写memory或redis                             |
+| RAG_TOP_K             | 8                         | 单次检索返回 chunk 数                                             |
+| RAG_MAX_PER_SOURCE    | 2                         | 同一 source 最多保留的 chunk 数；防止大文档霸占结果               |
+| ENABLE_HYDE           | false                     | 启用 HyDE（向量检索前用 LLM 生成假设性文档增强召回）             |
+| HYDE_MODEL            | (空=复用 LLM_MODEL)      | HyDE 使用的模型；可用小模型降低延迟                               |
+| HYDE_MAX_TOKENS       | 256                       | HyDE 生成假设性文档的最大 token 数                                |
+| SESSION_TTL_SECONDS   | 3600                      | 会话过期时间（秒）；过期后清除对话历史                            |
+| MEMORY_BACKEND        | redis                     | 短期记忆存放位置，可填写 memory 或 redis                          |
 | MEMORY_REDIS_PREFIX   | mma:sess:                 | Redis key 的前缀                                                  |
+| LANGFUSE_ENABLED      | false                     | 启用 LangFuse 全链路追踪                                         |
+| LANGFUSE_PUBLIC_KEY   | (空)                      | LangFuse 项目 public key                                         |
+| LANGFUSE_SECRET_KEY   | (空)                      | LangFuse 项目 secret key                                         |
+| LANGFUSE_HOST         | http://langfuse:3000      | LangFuse 服务地址                                                 |
