@@ -97,9 +97,40 @@ services:
       redis:
         condition: service_healthy
 
+  # ---------- LangFuse (可选，LANGFUSE_ENABLED=true 时使用) ----------
+  langfuse-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: langfuse
+      POSTGRES_PASSWORD: langfuse
+      POSTGRES_DB: langfuse
+    volumes:
+      - langfuse_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U langfuse"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    profiles: [langfuse]
+
+  langfuse:
+    image: langfuse/langfuse:2
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://langfuse:langfuse@langfuse-db:5432/langfuse
+      NEXTAUTH_SECRET: mythic-agent-langfuse-secret
+      NEXTAUTH_URL: http://localhost:3000
+      SALT: mythic-agent-salt
+    depends_on:
+      langfuse-db:
+        condition: service_healthy
+    profiles: [langfuse]
+
 volumes:
   etcd_data:
   minio_data:
   milvus_data:
   redis_data:
   hf_cache:
+  langfuse_pg_data:

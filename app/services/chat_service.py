@@ -58,7 +58,10 @@ def _chunk_text(message_chunk: Any) -> str:
 
 async def chat_stream(message: str, session_id: str | None = None) -> AsyncIterator[str]:
     """聊天 SSE 主迭代器。"""
+    from app.core.tracing import create_trace
+
     memory = get_memory()
+    trace = create_trace(session_id=session_id, name="chat", input_text=message)
     # 关键：先取 snapshot 给 graph 用，**再**把当前 user message 写入历史，
     # 否则 history 会包含本轮的 user 消息（重复）。
     history: list[dict[str, str]] = []
@@ -74,7 +77,7 @@ async def chat_stream(message: str, session_id: str | None = None) -> AsyncItera
 
     try:
         async for mode, payload in stream_events(
-            message, history=history, last_yaml=last_yaml
+            message, history=history, last_yaml=last_yaml,
         ):
             # ---- LLM token 流 ----
             if mode == "messages":
@@ -98,6 +101,8 @@ async def chat_stream(message: str, session_id: str | None = None) -> AsyncItera
                 if not isinstance(node_state, dict):
                     continue
                 if node_name == "planner":
+                    if trace:
+                        trace.span(name="planner", input=message, output=node_state)
                     yield _encode(
                         ChatChunk(
                             type="plan",
@@ -111,6 +116,19 @@ async def chat_stream(message: str, session_id: str | None = None) -> AsyncItera
                     )
                 elif node_name == "retriever":
                     docs = node_state.get("retrieved", []) or []
+                    hyde_doc = node_state.get("hyde_doc", "") or ""
+                    if trace and hyde_doc:
+                        trace.generation(
+                            name="hyde",
+                            input=message,
+                            output=hyde_doc,
+                        )
+                    if trace:
+                        trace.span(
+                            name="retriever",
+                            input=node_state.get("search_queries", []),
+                            output=[d.get("source", "") for d in docs[:10]],
+                        )
                     yield _encode(
                         ChatChunk(
                             type="retrieval",
@@ -127,12 +145,24 @@ async def chat_stream(message: str, session_id: str | None = None) -> AsyncItera
                     expl = node_state.get("explanation") or node_state.get("final_message") or ""
                     if expl:
                         final_explanation = expl
+                    if trace:
+                        trace.generation(
+                            name="generator",
+                            input=message,
+                            output=expl,
+                            metadata={"yaml": yaml_text} if yaml_text else None,
+                        )
                 elif node_name == "validator":
                     errors = node_state.get("validation_errors", []) or []
                     warnings = node_state.get("validation_warnings", []) or []
                     yaml_text = node_state.get("yaml_text", "") or ""
                     if yaml_text:
                         final_yaml = yaml_text
+                    if trace:
+                        trace.span(
+                            name="validator",
+                            output={"errors": errors[:5], "warnings": warnings[:5]},
+                        )
                     yield _encode(
                         ChatChunk(
                             type="validation",
@@ -148,6 +178,11 @@ async def chat_stream(message: str, session_id: str | None = None) -> AsyncItera
                     if yaml_text:
                         final_yaml = yaml_text
                         yield _encode(ChatChunk(type="yaml", content=yaml_text))
+                    if trace:
+                        trace.generation(
+                            name="fixer",
+                            output=yaml_text,
+                        )
 
     except Exception as e:  # noqa: BLE001
         logger.exception("chat_stream failed")

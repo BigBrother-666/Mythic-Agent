@@ -32,6 +32,9 @@ async def lifespan(app: FastAPI):  # type: ignore[no-untyped-def]
         logger.warning("RAG warmup failed (BM25 will lazy-build later): {}", e)
     yield
     await close_cache()
+    from app.core.tracing import flush_langfuse
+
+    flush_langfuse()
     logger.info("Stopped")
 
 
@@ -101,7 +104,7 @@ def create_app() -> FastAPI:
 
         @app.get("/", include_in_schema=False)
         async def index(request: Request):  # type: ignore[no-untyped-def]
-            return templates.TemplateResponse("index.html", {"request": request})
+            return templates.TemplateResponse(request, "index.html")
 
     return app
 

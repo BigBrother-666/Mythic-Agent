@@ -38,6 +38,9 @@ pyyaml==6.0.3
 # ------- Cache -------
 redis[hiredis]==7.4.0
 
+# ------- Observability -------
+langfuse>=2.50,<3.0
+
 # ------- Utility -------
 loguru==0.7.3
 orjson==3.11.9

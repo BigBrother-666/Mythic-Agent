@@ -157,10 +157,12 @@ class HybridRetriever:
 
         # HyDE：用 LLM 生成假设性文档，用其 embedding 替代原始 query 做向量检索
         embed_text = query
+        self.last_hyde_doc = ""
         if settings.enable_hyde:
             from app.rag.hyde import generate_hypothetical_document
 
             embed_text = await generate_hypothetical_document(query)
+            self.last_hyde_doc = embed_text
 
         vector = await embedder.embed_query(embed_text)
         vec_hits = await store.search(

@@ -41,6 +41,7 @@ class AgentState(TypedDict, total=False):
     notes: str
     search_queries: list[str]
     retrieved: list[dict[str, Any]]
+    hyde_doc: str
     raw_output: str
     yaml_text: str
     explanation: str
@@ -184,6 +185,8 @@ async def retriever_node(state: AgentState) -> AgentState:
     intent=item 时**额外**对每条 query 在 wiki=crucible 范围里再检索一次，
     确保物品触发器 (~onUse / Recipes / Furniture) 这类只在 crucible 出现的内容能命中。
     """
+    from app.rag.pipeline import get_last_hyde_doc
+
     queries = state.get("search_queries") or [state["user_input"]]
     intent = state.get("intent", "mob")
     seen_keys: set[str] = set()
@@ -213,7 +216,7 @@ async def retriever_node(state: AgentState) -> AgentState:
             except Exception as e:  # noqa: BLE001
                 logger.warning("crucible wiki_search failed for {}: {}", q, e)
 
-    return {**state, "retrieved": merged[:14]}
+    return {**state, "retrieved": merged[:14], "hyde_doc": get_last_hyde_doc()}
 
 
 def _format_context(hits: list[dict[str, Any]], limit: int = 6000) -> str:
@@ -408,6 +411,6 @@ async def stream_events(
         "last_yaml": last_yaml or "",
     }
     async for mode, payload in graph.astream(
-        state, stream_mode=["updates", "messages"]
+        state, stream_mode=["updates", "messages"],
     ):
         yield mode, payload

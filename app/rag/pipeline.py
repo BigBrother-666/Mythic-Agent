@@ -142,6 +142,12 @@ async def search_wiki(
     return await retriever.search(query, top_k=top_k, category=category, wiki=wiki)
 
 
+def get_last_hyde_doc() -> str:
+    """获取最近一次检索中 HyDE 生成的假设文档（未启用时为空字符串）。"""
+    retriever = get_retriever()
+    return getattr(retriever, "last_hyde_doc", "")
+
+
 async def warmup() -> None:
     """预热 retriever（构建 BM25 索引）。"""
     retriever = get_retriever()

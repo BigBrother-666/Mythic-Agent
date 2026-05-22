@@ -65,6 +65,12 @@ class Settings(BaseSettings):
     hyde_model: str = Field(default="")
     hyde_max_tokens: int = Field(default=256)
 
+    # ---------- LangFuse (可选) ----------
+    langfuse_enabled: bool = Field(default=False)
+    langfuse_public_key: str = Field(default="")
+    langfuse_secret_key: str = Field(default="")
+    langfuse_host: str = Field(default="http://langfuse:3000")
+
     # ---------- Memory 持久化 ----------
     # memory_backend ∈ {"memory","redis"}；redis 用同一个 REDIS_URL 共享连接
     memory_backend: str = Field(default="memory")
