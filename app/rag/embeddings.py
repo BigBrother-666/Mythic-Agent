@@ -25,11 +25,12 @@ class EmbeddingService:
         self._model_name = settings.embed_model
         self._dim = settings.embed_dim
         self._device = settings.embed_device
+        self._batch_size = settings.embed_batch_size
         logger.info("Loading embedding model {} on {}", self._model_name, self._device)
         self._embedder = HuggingFaceBgeEmbeddings(
             model_name=self._model_name,
             model_kwargs={"device": self._device},
-            encode_kwargs={"normalize_embeddings": True, "batch_size": 16},
+            encode_kwargs={"normalize_embeddings": True, "batch_size": self._batch_size},
         )
 
     @classmethod

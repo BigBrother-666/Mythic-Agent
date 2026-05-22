@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     embed_model: str = Field(default="BAAI/bge-small-zh-v1.5")
     embed_dim: int = Field(default=512)
     embed_device: str = Field(default="cpu")
+    embed_batch_size: int = Field(default=16)
 
     # ---------- Reranker (可选) ----------
     # ENABLE_RERANK=true 时，对融合后的候选做 cross-encoder 重排序
