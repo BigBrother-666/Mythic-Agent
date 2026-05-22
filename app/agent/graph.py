@@ -180,13 +180,15 @@ async def planner_node(state: AgentState) -> AgentState:
 
 
 async def retriever_node(state: AgentState) -> AgentState:
-    """对每个 search query 取 top-4 片段，去重合并。
+    """对每个 search query 取 top-k 片段，去重合并。
 
     intent=item 时**额外**对每条 query 在 wiki=crucible 范围里再检索一次，
     确保物品触发器 (~onUse / Recipes / Furniture) 这类只在 crucible 出现的内容能命中。
     """
     from app.rag.pipeline import get_last_hyde_doc
 
+    settings = get_settings()
+    per_query_k = settings.rag_top_k
     queries = state.get("search_queries") or [state["user_input"]]
     intent = state.get("intent", "mob")
     seen_keys: set[str] = set()
@@ -202,16 +204,15 @@ async def retriever_node(state: AgentState) -> AgentState:
 
     for q in queries[:4]:  # 最多 4 条避免爆 context
         try:
-            await _absorb(await wiki_search_dict(q, top_k=4))
+            await _absorb(await wiki_search_dict(q, top_k=per_query_k))
         except Exception as e:  # noqa: BLE001
             logger.warning("wiki_search failed for {}: {}", q, e)
             continue
         if intent == "item":
             try:
-                await _absorb(await wiki_search_dict(q, top_k=2, category=None))
-                # 用 wiki=crucible 过滤再取 2 条专题命中
+                await _absorb(await wiki_search_dict(q, top_k=per_query_k // 2, category=None))
                 await _absorb(
-                    await wiki_search_dict(q + " crucible", top_k=2)
+                    await wiki_search_dict(q + " crucible", top_k=per_query_k // 2)
                 )
             except Exception as e:  # noqa: BLE001
                 logger.warning("crucible wiki_search failed for {}: {}", q, e)
