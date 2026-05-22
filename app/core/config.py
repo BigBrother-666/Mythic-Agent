@@ -60,6 +60,11 @@ class Settings(BaseSettings):
     rag_max_per_source: int = Field(default=2)
     session_ttl_seconds: int = Field(default=3600)
 
+    # ---------- HyDE (可选) ----------
+    enable_hyde: bool = Field(default=False)
+    hyde_model: str = Field(default="")
+    hyde_max_tokens: int = Field(default=256)
+
     # ---------- Memory 持久化 ----------
     # memory_backend ∈ {"memory","redis"}；redis 用同一个 REDIS_URL 共享连接
     memory_backend: str = Field(default="memory")

@@ -137,6 +137,8 @@ class HybridRetriever:
 
         wiki ∈ {"mythicmobs","crucible","local",None}。None 表示不过滤（默认）。
 
+        启用 HyDE 时流程：
+            query → LLM 生成假设性文档 → embedding → 向量检索
         启用 rerank 时流程：
             vector top-(k*pool_factor*3) ∪ BM25 top-(k*pool_factor*2)
               → RRF 融合 → 取前 k*pool_factor 个候选
@@ -153,11 +155,19 @@ class HybridRetriever:
         embedder = get_embedding_service()
         store = get_milvus_store()
 
-        vector = await embedder.embed_query(query)
+        # HyDE：用 LLM 生成假设性文档，用其 embedding 替代原始 query 做向量检索
+        embed_text = query
+        if settings.enable_hyde:
+            from app.rag.hyde import generate_hypothetical_document
+
+            embed_text = await generate_hypothetical_document(query)
+
+        vector = await embedder.embed_query(embed_text)
         vec_hits = await store.search(
             vector, top_k=candidate_size * 3, category=category, wiki=wiki
         )
 
+        # BM25 始终用原始 query（关键词匹配不需要扩展）
         bm25_pairs = self._bm25_search(query, top_k=candidate_size * 2)
 
         # ---------- RRF 融合 ----------
