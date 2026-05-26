@@ -35,8 +35,11 @@ docker compose up -d --build
 # 默认 CUDA 12.9 wheel；
 docker compose -f docker-compose.yml -f docker-compose.cuda.yml up -d --build
 
+# 如果启动了 langfuse
+docker compose --profile langfuse up -d
+
 # 等 milvus healthy
-docker compose exec fastapi python -m scripts.ingest --drop --examples ./examples
+docker compose exec fastapi python -m scripts.ingest --drop --examples /examples
 ```
 
 打开浏览器 http://localhost:8000
