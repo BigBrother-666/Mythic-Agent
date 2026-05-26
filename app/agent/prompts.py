@@ -91,8 +91,8 @@ is_followup 判定（**关键，决定后续是否走"修改"路径**）：
 - 若是新需求（"再来一个不同的 boss"、"换个物品" 等明确的另起话题），is_followup=false。
 
 search_queries 规则：
-- intent=mob：覆盖「mob 的 Type、特殊技能、视觉/音效、AI」3-4 个角度
-- intent=item：覆盖「Material/Id、Skills 触发器（onUse/onLeftclick/onConsume）、Crucible 特性（Furniture/Recipe）」3-4 个角度
+- intent=mob：覆盖「mob 的 Type、特殊技能、视觉（粒子效果）/音效、技能条件、触发器、AI等」7-10 个角度
+- intent=item：覆盖「Material/Id、Skills 触发器（onUse/onLeftclick/onConsume）、Crucible 特性（Furniture/Recipe）」7-10 个角度
 - intent=skill：覆盖技能用到的核心 mechanics + targeter + condition
 - intent=chat：留空数组
 - 每条 query 不超过 12 个英文单词，使用英文以匹配 wiki 内容
@@ -154,20 +154,37 @@ MOB_GENERATOR_PROMPT = (
     AlwaysShowName: <bool>
     PreventOtherDrops: <bool>
     MovementSpeed: <数字>
+    # 更多选项请参考 wiki（wiki/MythicMobs.wiki/Mobs/Options.md）
   AIGoalSelectors:    # 可选，覆盖默认 AI
   - <selector>
   AITargetSelectors:
   - <selector>
   Skills:
   - <mechanic>{{...}} <targeter> ~<trigger> ?<condition>
-  - skill{{s=<引用的 metaskill 名>}} @target ~onTimer:60
+  - skill{{s=<引用的 metaskill 名>}} @<targeter> ~<trigger> ?<condition>
   Drops:              # 可选
   - <item> 1 0.5
 
 # 在下面接着写所有被 mob 引用的 metaskill（如果有）
+# 除了Skills字段，其他都是可选字段
 <引用的 metaskill 名>:
+  Conditions:
+  - condition1
+  - condition2
+  TargetConditions:
+  - condition3
+  - condition4
+  TriggerConditions:
+  - condition5
+  - condition6
+  FailedConditionsSkill: [the metaskill to executed if the conditions did not check]
+  Cooldown: [seconds]
+  OnCooldownSkill: [the metaskill to execute if this one is on cooldown]
+  Skill: [an additional metaskill to execute asynchronously from this one]
   Skills:
   - <mechanic> @target
+  - mechanic2
+  - mechanic3
 ```
 
 ## 解释
@@ -203,7 +220,7 @@ ITEM_GENERATOR_PROMPT = (
   - SHARPNESS:5
   Options:             # 可选
     Unbreakable: <bool>
-  Recipes:             # Crucible：合成配方
+  Recipes:             # Crucible：合成配方，可选
     SHAPED:
       Type: SHAPED
       Amount: 1
@@ -212,13 +229,29 @@ ITEM_GENERATOR_PROMPT = (
       - <d> | <e> | <f>
       - <g> | <h> | <i>
   Skills:              # Crucible：物品触发器
-  - skill{{s=<触发的 metaskill>}} @self ~onUse ?holding{{m={name}}}
-  - skill{{s=<另一个>}} @target ~onLeftclick ?crouching
+  - skill{{s=<触发的 metaskill>}} @<targeter> ~<trigger> ?<condition>
+  - skill{{s=<另一个>}} @<targeter> ~<trigger> ?<condition>
 
 # 接着写所有被引用的 metaskill（如果有）
+# 除了Skills字段，其他都是可选字段
 <引用的 metaskill 名>:
+  Conditions:
+  - condition1
+  - condition2
+  TargetConditions:
+  - condition3
+  - condition4
+  TriggerConditions:
+  - condition5
+  - condition6
+  FailedConditionsSkill: [the metaskill to executed if the conditions did not check]
+  Cooldown: [seconds]
+  OnCooldownSkill: [the metaskill to execute if this one is on cooldown]
+  Skill: [an additional metaskill to execute asynchronously from this one]
   Skills:
-  - <mechanic> @<targeter>
+  - <mechanic> @target
+  - mechanic2
+  - mechanic3
 ```
 
 ## 解释
@@ -246,15 +279,38 @@ SKILL_GENERATOR_PROMPT = (
   - <condition>
   Conditions:          # 可选；释放者条件
   - <condition>
+  TriggerConditions:   # 可选；技能触发时的额外条件
+  - condition5
+  - condition6
+  FailedConditionsSkill: [the metaskill to executed if the conditions did not check]
+  Cooldown: [seconds]
+  OnCooldownSkill: [the metaskill to execute if this one is on cooldown]
+  Skill: [an additional metaskill to execute asynchronously from this one]
   Skills:
   - <mechanic>{{...}} <targeter> ?<inline-condition>
   - delay <ticks>
   - skill{{s=<子 metaskill>}} @target
 
 # 如有引用其他 metaskill，紧接着定义
+# 除了Skills字段，其他都是可选字段
 <子 metaskill 名>:
+  Conditions:
+  - condition1
+  - condition2
+  TargetConditions:
+  - condition3
+  - condition4
+  TriggerConditions:
+  - condition5
+  - condition6
+  FailedConditionsSkill: [the metaskill to executed if the conditions did not check]
+  Cooldown: [seconds]
+  OnCooldownSkill: [the metaskill to execute if this one is on cooldown]
+  Skill: [an additional metaskill to execute asynchronously from this one]
   Skills:
-  - <mechanic> @<targeter>
+  - <mechanic> @target
+  - mechanic2
+  - mechanic3
 ```
 
 ## 解释
