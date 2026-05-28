@@ -9,12 +9,28 @@
     ↓
 FastAPI (uvloop, async)
     ↓
-LangGraph Agent: planner → retriever → generator → validator → (fix loop)
+LangGraph Agent: planner → retriever(硬编码预检索) → generator(ReAct tool-calling) → validator → (fix loop)
     ↓ astream(stream_mode=["updates","messages"])  ← 节点更新 + LLM token 双轨
-Tools: wiki_search、yaml_validator、example_retriever、config_formatter
+Generator 可调用工具: wiki_search、list_mechanics、list_targeters、list_triggers、list_conditions
     ↓
 RAG: chunker → bge embedding → Milvus + BM25 (RRF 融合) → [可选 HyDE / Rerank]
 ```
+
+### Generator 可用工具
+
+Generator 阶段作为 ReAct agent，生成过程中可按需调用以下工具补充信息：
+
+| 工具 | 用途 | 参数 |
+|------|------|------|
+| `wiki_search` | 用自然语言检索 Wiki 文档（语法、属性说明） | `query: str` — 自然语言查询；`tags: list[str]` — 可选，MythicMobs 标识符预过滤；`top_k: int` — 返回数量 |
+| `list_mechanics` | 列出所有可用的 Mechanics 名称（MythicMobs + Crucible） | 无参数 |
+| `list_targeters` | 列出所有可用的 Targeters 名称（MythicMobs + Crucible） | 无参数 |
+| `list_triggers` | 列出所有可用的 Triggers 名称（MythicMobs + Crucible） | 无参数 |
+| `list_conditions` | 列出所有可用的 Conditions 名称（MythicMobs + Crucible） | 无参数 |
+
+`wiki_search` 的 `tags` 参数说明：传入 tags 时，先按 Milvus 标量过滤（`tags like '%"tag"%'`）拿到相关文档，再结合 query 做向量检索，两路结果合并去重。适合已知涉及哪些 mechanic/targeter 但需要查看具体用法的场景。
+
+`list_*` 工具从 `WIKI_ROOT` 下的 `MythicMobs.wiki/Skills/` 和 `mythiccrucible.wiki/Skills/` 对应子目录读取 `.md` 文件名（不含扩展名，不递归子目录），合并去重后返回。
 
 ## 本地部署
 
@@ -262,7 +278,7 @@ curl -X POST http://localhost:8000/api/validate \
 | APP_HOST              | 0.0.0.0                   | FastAPI 监听地址                                                  |
 | APP_PORT              | 8000                      | FastAPI 监听端口                                                  |
 | APP_LOG_LEVEL         | INFO                      | 日志级别（DEBUG / INFO / WARNING / ERROR）                        |
-| WIKI_ROOT             | /wiki                     | wiki 父目录（容器内）；下含 MythicMobs.wiki / mythiccrucible.wiki |
+| WIKI_ROOT             | /wiki                     | wiki 父目录绝对路径；下含 MythicMobs.wiki / mythiccrucible.wiki |
 | MAX_PROMPT_CHARS      | 8000                      | 送入 LLM 的 RAG 上下文最大字符数                                  |
 | RATE_LIMIT_PER_MINUTE | 30                        | per-IP 限流                                                       |
 | RAG_TOP_K             | 8                         | 单次检索返回 chunk 数                                             |
@@ -277,3 +293,5 @@ curl -X POST http://localhost:8000/api/validate \
 | LANGFUSE_PUBLIC_KEY   | (空)                      | LangFuse 项目 public key                                         |
 | LANGFUSE_SECRET_KEY   | (空)                      | LangFuse 项目 secret key                                         |
 | LANGFUSE_HOST         | http://langfuse:3000      | LangFuse 服务地址                                                 |
+| AGENT_TOOLS           | wiki_search,list_mechanics,list_targeters,list_triggers,list_conditions | Generator 阶段可调用的工具列表（逗号分隔）                   |
+| MAX_TOOL_CALLS        | 8                         | Generator 单次生成中最多调用工具的次数                            |

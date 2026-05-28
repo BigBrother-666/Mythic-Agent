@@ -152,6 +152,13 @@ async def chat_stream(message: str, session_id: str | None = None) -> AsyncItera
                             output=expl,
                             metadata={"yaml": yaml_text} if yaml_text else None,
                         )
+                        tool_log = node_state.get("tool_calls_log") or []
+                        for tc in tool_log:
+                            trace.span(
+                                name=f"tool:{tc['tool']}",
+                                input=tc.get("args"),
+                                output=tc.get("result"),
+                            )
                 elif node_name == "validator":
                     errors = node_state.get("validation_errors", []) or []
                     warnings = node_state.get("validation_warnings", []) or []

@@ -25,6 +25,18 @@ async def lifespan(app: FastAPI):  # type: ignore[no-untyped-def]
     setup_logging()
     settings = get_settings()
     logger.info("Starting MythicMobs Agent (model={})", settings.llm_model)
+
+    from app.agent.tools.list_wiki import list_mechanics, list_targeters, list_triggers, list_conditions
+
+    logger.info("Enabled tools: {}", settings.agent_tools)
+    logger.info(
+        "Wiki assets — mechanics: {}, targeters: {}, triggers: {}, conditions: {}",
+        len(list_mechanics.invoke({}).splitlines()),
+        len(list_targeters.invoke({}).splitlines()),
+        len(list_triggers.invoke({}).splitlines()),
+        len(list_conditions.invoke({}).splitlines()),
+    )
+
     await get_cache()
     try:
         await rag_warmup()

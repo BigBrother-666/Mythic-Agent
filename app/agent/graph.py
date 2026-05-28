@@ -12,7 +12,7 @@ import json
 import re
 from typing import Any, AsyncIterator, Literal, TypedDict
 
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 from langgraph.graph import END, StateGraph
 
 from app.agent.prompts import (
@@ -54,6 +54,8 @@ class AgentState(TypedDict, total=False):
     history: list[dict[str, str]]  # 最近若干轮 [{role, content}]
     last_yaml: str  # 上一次生成的 YAML（作为修改基线）
     is_followup: bool  # planner 判定本次是否为「修改上一份 YAML」
+    # ---- generator tool-calling ----
+    tool_calls_log: list[dict[str, Any]]  # generator 阶段的 tool 调用记录
 
 
 # ---------- LLM 工厂 ----------
@@ -94,6 +96,36 @@ def _wiki_search_dict_lazy(query: str, top_k: int = 6, category: str | None = No
 
 # 给 monkeypatch / 测试一个稳定的注入点。
 wiki_search_dict = _wiki_search_dict_lazy
+
+
+# ---------- Generator tool-calling ----------
+
+
+def _get_configured_tools() -> list:
+    """根据配置返回 generator 可用的 tool 列表。"""
+    settings = get_settings()
+    tool_names = settings.agent_tools_list
+    if not tool_names:
+        return []
+    from app.agent.tools.wiki_search import wiki_search as _ws
+    from app.agent.tools.list_wiki import list_mechanics as _lm
+    from app.agent.tools.list_wiki import list_targeters as _lt
+    from app.agent.tools.list_wiki import list_triggers as _ltr
+    from app.agent.tools.list_wiki import list_conditions as _lc
+
+    registry = {
+        "wiki_search": _ws,
+        "list_mechanics": _lm,
+        "list_targeters": _lt,
+        "list_triggers": _ltr,
+        "list_conditions": _lc,
+    }
+    return [registry[n] for n in tool_names if n in registry]
+
+
+def _build_tool_map(tools: list) -> dict[str, Any]:
+    """tool name → tool callable 映射。"""
+    return {t.name: t for t in tools}
 
 
 # ---------- 节点实现 ----------
@@ -234,13 +266,17 @@ def _format_context(hits: list[dict[str, Any]], limit: int = 6000) -> str:
 
 
 async def generator_node(state: AgentState) -> AgentState:
-    """生成 YAML + 解释 + 建议；按 intent 选不同模板。"""
+    """Generator：带 tool-calling 的 ReAct 生成。"""
+    settings = get_settings()
     llm = get_llm()
+    tools = _get_configured_tools()
+    tool_map = _build_tool_map(tools)
+
     context_block = render_context_block(
         state.get("history") or [], state.get("last_yaml") or ""
     )
+
     if state.get("intent") == "chat":
-        # 闲聊分支：直接用 SYSTEM_PROMPT 回答，不强制 YAML 模板，但仍把历史 + last_yaml 给 LLM 看。
         chat_user = (
             (context_block + "\n用户输入：\n" + state["user_input"])
             if context_block
@@ -250,7 +286,7 @@ async def generator_node(state: AgentState) -> AgentState:
             [SystemMessage(content=SYSTEM_PROMPT), HumanMessage(content=chat_user)]
         )
         text = resp.content if isinstance(resp.content, str) else str(resp.content)
-        return {**state, "raw_output": text, "yaml_text": "", "explanation": text, "suggestions": [], "final_message": text}
+        return {**state, "raw_output": text, "yaml_text": "", "explanation": text, "suggestions": [], "final_message": text, "tool_calls_log": []}
 
     intent = state.get("intent", "mob")
     name = state.get("name") or _DEFAULT_NAME_BY_INTENT.get(intent, "MyCustom")
@@ -264,11 +300,38 @@ async def generator_node(state: AgentState) -> AgentState:
         context=context,
         context_block=context_block,
         is_followup=str(bool(state.get("is_followup"))).lower(),
+        max_tool_calls=settings.max_tool_calls,
     )
-    resp = await llm.ainvoke(
-        [SystemMessage(content=SYSTEM_PROMPT), HumanMessage(content=prompt)]
-    )
-    text = resp.content if isinstance(resp.content, str) else str(resp.content)
+
+    llm_with_tools = llm.bind_tools(tools) if tools else llm
+    messages: list = [SystemMessage(content=SYSTEM_PROMPT), HumanMessage(content=prompt)]
+    tool_results_for_trace: list[dict[str, Any]] = []
+    calls = 0
+
+    while calls < settings.max_tool_calls:
+        response = await llm_with_tools.ainvoke(messages)
+        if not getattr(response, "tool_calls", None):
+            break
+        messages.append(response)
+        for tc in response.tool_calls:
+            tool_fn = tool_map.get(tc["name"])
+            if not tool_fn:
+                result = f"(unknown tool: {tc['name']})"
+            else:
+                result = await tool_fn.ainvoke(tc["args"])
+            tool_results_for_trace.append({
+                "tool": tc["name"], "args": tc["args"], "result": result,
+            })
+            messages.append(ToolMessage(content=result, tool_call_id=tc["id"]))
+            calls += 1
+            if calls >= settings.max_tool_calls:
+                messages.append(HumanMessage(content=f"[系统提示] 你已达到工具调用上限（{settings.max_tool_calls} 次），请根据已有信息直接输出最终结果，不要再调用工具。"))
+                break
+
+    if getattr(response, "tool_calls", None):
+        response = await llm.ainvoke(messages)
+
+    text = response.content if isinstance(response.content, str) else str(response.content)
     yaml_text = _extract_yaml(text)
     explanation, suggestions = _split_explanation_suggestions(text)
     return {
@@ -277,6 +340,7 @@ async def generator_node(state: AgentState) -> AgentState:
         "yaml_text": yaml_text,
         "explanation": explanation,
         "suggestions": suggestions,
+        "tool_calls_log": tool_results_for_trace,
     }
 
 

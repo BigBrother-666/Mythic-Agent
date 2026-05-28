@@ -15,6 +15,7 @@ from app.agent import prompts as prompts_module
 class _StubMessage:
     def __init__(self, content: str) -> None:
         self.content = content
+        self.tool_calls = []
 
 
 class _StubLLM:
@@ -36,6 +37,9 @@ class _StubLLM:
         if idx >= len(self.responses):
             return _StubMessage(self.responses[-1])
         return _StubMessage(self.responses[idx])
+
+    def bind_tools(self, tools):  # type: ignore[no-untyped-def]
+        return self
 
 
 async def _fake_search(q, top_k=4, category=None, wiki=None):  # type: ignore[no-untyped-def]

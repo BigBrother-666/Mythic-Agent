@@ -136,10 +136,30 @@ async def search_wiki(
     top_k: int | None = None,
     category: str | None = None,
     wiki: str | None = None,
+    tags: list[str] | None = None,
 ) -> list[FusedHit]:
     """高层检索入口。"""
     retriever = get_retriever()
-    return await retriever.search(query, top_k=top_k, category=category, wiki=wiki)
+    return await retriever.search(query, top_k=top_k, category=category, wiki=wiki, tags=tags)
+
+
+async def search_by_tags(tags: list[str], top_k: int = 4) -> list[FusedHit]:
+    """按 tags 标量过滤检索示例配置。"""
+    from app.rag.vector_store import VectorHit
+
+    store = get_milvus_store()
+    hits = await store.query_by_tags(tags, top_k=top_k)
+    return [
+        FusedHit(
+            score=h.score,
+            text=h.text,
+            title=h.title,
+            source=h.source,
+            category=h.category,
+            tags=h.tags,
+        )
+        for h in hits
+    ]
 
 
 def get_last_hyde_doc() -> str:
@@ -154,7 +174,7 @@ async def warmup() -> None:
     await retriever.warmup()
 
 
-__all__ = ["ingest_wiki", "search_wiki", "warmup"]
+__all__ = ["ingest_wiki", "search_wiki", "search_by_tags", "warmup"]
 
 
 async def main_cli() -> None:

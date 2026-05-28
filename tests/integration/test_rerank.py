@@ -32,7 +32,7 @@ class _FakeStore:
     def has_collection(self) -> bool:
         return True
 
-    async def search(self, vector, top_k=8, category=None, wiki=None):  # type: ignore[no-untyped-def]
+    async def search(self, vector, top_k=8, category=None, wiki=None, tags=None):  # type: ignore[no-untyped-def]
         return [_make_hit(i) for i in range(min(top_k, 30))]
 
     async def fetch_all_for_bm25(self):  # type: ignore[no-untyped-def]

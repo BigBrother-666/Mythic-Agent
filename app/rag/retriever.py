@@ -132,6 +132,7 @@ class HybridRetriever:
         top_k: int | None = None,
         category: str | None = None,
         wiki: str | None = None,
+        tags: list[str] | None = None,
     ) -> list[FusedHit]:
         """对外检索接口；返回 RRF 融合后（如启用则再 rerank）的命中。
 
@@ -166,7 +167,7 @@ class HybridRetriever:
 
         vector = await embedder.embed_query(embed_text)
         vec_hits = await store.search(
-            vector, top_k=candidate_size * 3, category=category, wiki=wiki
+            vector, top_k=candidate_size * 3, category=category, wiki=wiki, tags=tags
         )
 
         # BM25 始终用原始 query（关键词匹配不需要扩展）

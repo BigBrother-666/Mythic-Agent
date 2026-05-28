@@ -143,13 +143,17 @@ class MilvusStore:
         top_k: int = 8,
         category: str | None = None,
         wiki: str | None = None,
+        tags: list[str] | None = None,
     ) -> list[VectorHit]:
-        """按向量检索；可选 category / wiki 过滤。"""
+        """按向量检索；可选 category / wiki / tags 过滤。"""
         clauses: list[str] = []
         if category:
             clauses.append(f'category == "{category}"')
         if wiki:
             clauses.append(f'wiki == "{wiki}"')
+        if tags:
+            tag_clauses = [f'tags like \'%"{t.lower()}"%\'' for t in tags]
+            clauses.append(f"({' or '.join(tag_clauses)})")
         filter_expr = " and ".join(clauses)
         result = await asyncio.to_thread(
             self._client.search,
@@ -217,6 +221,42 @@ class MilvusStore:
                 break
             cursor += batch
         return out
+
+    async def query_by_tags(
+        self,
+        tags: list[str],
+        top_k: int = 4,
+    ) -> list[VectorHit]:
+        """按 tags VARCHAR 字段做标量过滤，多 tag 用 or 连接。查询前统一转小写。"""
+        if not tags:
+            return []
+        clauses = [f'tags like \'%"{t.lower()}"%\'' for t in tags]
+        filter_expr = " or ".join(clauses)
+        result = await asyncio.to_thread(
+            self._client.query,
+            collection_name=self._collection,
+            filter=filter_expr,
+            output_fields=["text", "title", "source", "category", "tags", "wiki"],
+            limit=top_k,
+        )
+        hits: list[VectorHit] = []
+        for entity in result:
+            try:
+                tag_list = json.loads(entity.get("tags") or "[]")
+            except json.JSONDecodeError:
+                tag_list = []
+            hits.append(
+                VectorHit(
+                    score=1.0,
+                    text=entity.get("text", ""),
+                    title=entity.get("title", ""),
+                    source=entity.get("source", ""),
+                    category=entity.get("category", ""),
+                    tags=tag_list,
+                    wiki=entity.get("wiki", "mythicmobs"),
+                )
+            )
+        return hits
 
     async def count(self) -> int:
         """估算 collection 中的实体数。"""

@@ -60,6 +60,14 @@ class Settings(BaseSettings):
     rag_max_per_source: int = Field(default=2)
     session_ttl_seconds: int = Field(default=3600)
 
+    # ---------- Agent tool-calling ----------
+    agent_tools: str = Field(default="wiki_search,list_mechanics,list_targeters,list_triggers,list_conditions")
+    max_tool_calls: int = Field(default=8)
+
+    @property
+    def agent_tools_list(self) -> list[str]:
+        return [t.strip() for t in self.agent_tools.split(",") if t.strip()]
+
     # ---------- HyDE (可选) ----------
     enable_hyde: bool = Field(default=False)
     hyde_model: str = Field(default="")
