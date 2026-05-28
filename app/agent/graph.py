@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import re
+from datetime import datetime, timezone
 from typing import Any, AsyncIterator, Literal, TypedDict
 
 from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
@@ -315,12 +316,15 @@ async def generator_node(state: AgentState) -> AgentState:
         messages.append(response)
         for tc in response.tool_calls:
             tool_fn = tool_map.get(tc["name"])
+            t_start = datetime.now(timezone.utc)
             if not tool_fn:
                 result = f"(unknown tool: {tc['name']})"
             else:
                 result = await tool_fn.ainvoke(tc["args"])
+            t_end = datetime.now(timezone.utc)
             tool_results_for_trace.append({
                 "tool": tc["name"], "args": tc["args"], "result": result,
+                "start_time": t_start, "end_time": t_end,
             })
             messages.append(ToolMessage(content=result, tool_call_id=tc["id"]))
             calls += 1

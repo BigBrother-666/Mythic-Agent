@@ -8,6 +8,7 @@
 """
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any, AsyncIterator
 
 import orjson
@@ -74,6 +75,8 @@ async def chat_stream(message: str, session_id: str | None = None) -> AsyncItera
 
     final_yaml = ""
     final_explanation = ""
+    node_start_times: dict[str, datetime] = {}
+    last_node_end = datetime.now(timezone.utc)
 
     try:
         async for mode, payload in stream_events(
@@ -88,6 +91,8 @@ async def chat_stream(message: str, session_id: str | None = None) -> AsyncItera
                 node = _node_from_metadata(metadata if isinstance(metadata, dict) else None)
                 if node not in _STREAM_NODES:
                     continue
+                if node not in node_start_times:
+                    node_start_times[node] = datetime.now(timezone.utc)
                 token = _chunk_text(message_chunk)
                 if not token:
                     continue
@@ -100,9 +105,13 @@ async def chat_stream(message: str, session_id: str | None = None) -> AsyncItera
             for node_name, node_state in payload.items():
                 if not isinstance(node_state, dict):
                     continue
+                now = datetime.now(timezone.utc)
+                start = node_start_times.pop(node_name, last_node_end)
+                last_node_end = now
+
                 if node_name == "planner":
                     if trace:
-                        trace.span(name="planner", input=message, output=node_state)
+                        trace.span(name="planner", input=message, output=node_state, start_time=start, end_time=now)
                     yield _encode(
                         ChatChunk(
                             type="plan",
@@ -128,6 +137,8 @@ async def chat_stream(message: str, session_id: str | None = None) -> AsyncItera
                             name="retriever",
                             input=node_state.get("search_queries", []),
                             output=[d.get("source", "") for d in docs[:10]],
+                            start_time=start,
+                            end_time=now,
                         )
                     yield _encode(
                         ChatChunk(
@@ -137,7 +148,6 @@ async def chat_stream(message: str, session_id: str | None = None) -> AsyncItera
                         )
                     )
                 elif node_name == "generator":
-                    # token 流已经实时透出；这里只补发一次 yaml 提取结果与 explanation
                     yaml_text = node_state.get("yaml_text", "") or ""
                     if yaml_text:
                         final_yaml = yaml_text
@@ -151,6 +161,8 @@ async def chat_stream(message: str, session_id: str | None = None) -> AsyncItera
                             input=message,
                             output=expl,
                             metadata={"yaml": yaml_text} if yaml_text else None,
+                            start_time=start,
+                            end_time=now,
                         )
                         tool_log = node_state.get("tool_calls_log") or []
                         for tc in tool_log:
@@ -158,6 +170,8 @@ async def chat_stream(message: str, session_id: str | None = None) -> AsyncItera
                                 name=f"tool:{tc['tool']}",
                                 input=tc.get("args"),
                                 output=tc.get("result"),
+                                start_time=tc.get("start_time"),
+                                end_time=tc.get("end_time"),
                             )
                 elif node_name == "validator":
                     errors = node_state.get("validation_errors", []) or []
@@ -169,6 +183,8 @@ async def chat_stream(message: str, session_id: str | None = None) -> AsyncItera
                         trace.span(
                             name="validator",
                             output={"errors": errors[:5], "warnings": warnings[:5]},
+                            start_time=start,
+                            end_time=now,
                         )
                     yield _encode(
                         ChatChunk(
@@ -189,6 +205,8 @@ async def chat_stream(message: str, session_id: str | None = None) -> AsyncItera
                         trace.generation(
                             name="fixer",
                             output=yaml_text,
+                            start_time=start,
+                            end_time=now,
                         )
 
     except Exception as e:  # noqa: BLE001
