@@ -13,11 +13,43 @@ import asyncio
 from app.core.config import get_settings
 from app.core.logging import logger
 
-_HYDE_PROMPT = """\
-你是 MythicMobs Wiki 的作者。根据下面的用户查询，写一段简短的 wiki 文档片段（100-200字）来回答这个问题。
-直接输出文档内容，不要加任何前缀或解释。用与查询相同的语言回答。
+_HYDE_PROMPT = '''\
+You are a MythicMobs Wiki author.
 
-用户查询：{query}"""
+Based on the user's query, generate 1-5 hypothetical technical documentation snippets that might appear in the MythicMobs Wiki.
+
+Requirements:
+- Write in English ONLY, regardless of the user's query language
+- Use Wiki/technical documentation style
+- Include relevant terms, config keys, mechanic names, skill names, parameter names
+- Content should resemble real knowledge base chunks
+- No chat, no explanation, no prefix
+- Do not invent non-existent APIs
+- Be concise but information-dense
+
+Example style:
+
+---
+The freeze mechanic prevents targets from moving for a duration.
+Example:
+- freeze{{ticks=60}}
+- potion{{type=SLOW;duration=60}}
+Targets affected by freeze may still rotate unless stun is applied.
+---
+
+---
+Teleport moves the caster or target entity to another location.
+Options include:
+- location
+- delay
+- noise
+- spread
+Teleport can be used inside skills and targeters.
+---
+
+User query:
+{query}
+'''
 
 
 async def generate_hypothetical_document(query: str) -> str:
@@ -31,7 +63,7 @@ async def generate_hypothetical_document(query: str) -> str:
             model=settings.hyde_model or settings.llm_model,
             api_key=settings.openai_api_key,
             base_url=settings.openai_base_url,
-            temperature=0.7,
+            temperature=0.5,
             max_tokens=settings.hyde_max_tokens,
         )
         prompt = _HYDE_PROMPT.format(query=query)

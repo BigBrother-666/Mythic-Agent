@@ -47,7 +47,7 @@ def _tokenize(text: str) -> list[str]:
     text = text.lower()
     out: list[str] = []
 
-    # 先提取英文/数字 token（含下划线，保留 MythicMobs 标识符完整性）
+    # 先提取英文/数字 token
     en_tokens = _MYTHIC_PATTERN.findall(text)
     for tok in en_tokens:
         if tok not in _STOPWORDS and len(tok) > 1:
@@ -115,16 +115,17 @@ class HybridRetriever:
             self._corpus_hits = hits
             logger.info("BM25 index built over {} chunks", len(hits))
 
-    def _bm25_search(self, query: str, top_k: int) -> list[tuple[int, float]]:
-        """BM25 检索，返回 (corpus_index, score)。"""
-        if self._bm25 is None:
-            return []
-        tokens = _tokenize(query)
-        if not tokens:
+    def _bm25_search_with_tokens(self, tokens: list[str], top_k: int) -> list[tuple[int, float]]:
+        """BM25 检索（接受预处理 token），返回 (corpus_index, score)。"""
+        if self._bm25 is None or not tokens:
             return []
         scores = self._bm25.get_scores(tokens)
         ranked = sorted(enumerate(scores), key=lambda x: x[1], reverse=True)
         return [(i, float(s)) for i, s in ranked[:top_k] if s > 0]
+
+    def _bm25_search(self, query: str, top_k: int) -> list[tuple[int, float]]:
+        """BM25 检索，返回 (corpus_index, score)。"""
+        return self._bm25_search_with_tokens(_tokenize(query), top_k)
 
     async def search(
         self,
@@ -158,20 +159,25 @@ class HybridRetriever:
 
         # HyDE：用 LLM 生成假设性文档，用其 embedding 替代原始 query 做向量检索
         embed_text = query
-        self.last_hyde_doc = ""
+        hyde_doc = ""
         if settings.enable_hyde:
             from app.rag.hyde import generate_hypothetical_document
 
             embed_text = await generate_hypothetical_document(query)
-            self.last_hyde_doc = embed_text
+            hyde_doc = embed_text
+        self.last_hyde_doc = hyde_doc
 
         vector = await embedder.embed_query(embed_text)
         vec_hits = await store.search(
             vector, top_k=candidate_size * 3, category=category, wiki=wiki, tags=tags
         )
 
-        # BM25 始终用原始 query（关键词匹配不需要扩展）
-        bm25_pairs = self._bm25_search(query, top_k=candidate_size * 2)
+        # BM25：合并原始 query 英文 token + HyDE 英文 token（提升跨语言召回）
+        if hyde_doc:
+            bm25_tokens = list(dict.fromkeys(_tokenize(query) + _tokenize(hyde_doc)))
+        else:
+            bm25_tokens = _tokenize(query)
+        bm25_pairs = self._bm25_search_with_tokens(bm25_tokens, top_k=candidate_size * 2)
 
         # ---------- RRF 融合 ----------
         rrf_k = 60
