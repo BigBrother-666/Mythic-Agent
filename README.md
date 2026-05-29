@@ -142,19 +142,21 @@ docker compose exec fastapi python -m eval.run_eval --rerank on --top-k 8
 评估结果（N=133）：
 
 Embed Model: BAAI/bge-small-zh-v1.5
+
 Rerank Model: BAAI/bge-reranker-v2-m3
 
 | metric   | rerank_off | rerank_on | Delta   |
 | -------- | ---------- | --------- | ------- |
-| recall@1 | 0.241      | 0.383     | +14.3pp |
-| recall@3 | 0.474      | 0.617     | +14.3pp |
-| recall@5 | 0.579      | 0.669     | +9.0pp  |
-| recall@8 | 0.662      | 0.722     | +6.0pp  |
-| mrr      | 0.376      | 0.505     | +12.9pp |
+| recall@1 | 0.271      | 0.406     | +13.5pp |
+| recall@3 | 0.489      | 0.639     | +15.0pp |
+| recall@5 | 0.594      | 0.744     | +15.0pp  |
+| recall@8 | 0.699      | 0.789     | +9.0pp  |
+| mrr      | 0.408      | 0.538     | +13.0pp |
 
 ---
 
 Embed Model: Qwen/Qwen3-Embedding-0.6B
+
 Rerank Model: Qwen/Qwen3-Reranker-0.6B
 
 | metric   | rerank_off | rerank_on | Delta  |
